@@ -1,0 +1,18 @@
+# Java / Maven (backend)
+backend/target/
+*.class
+
+# Node / Angular (frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Local env overrides
+.env
+*.local.yml
