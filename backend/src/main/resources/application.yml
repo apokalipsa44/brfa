@@ -11,11 +11,22 @@ spring:
     multipart:
       max-file-size: 5MB
       max-request-size: 6MB
+  ai:
+    openai:
+      api-key: lm-studio   # any non-empty string; LM Studio ignores it (plan §6.3)
+      # NOTE: must include /v1 — Spring AI appends only /chat/completions (M7)
+      base-url: ${LLM_BASE_URL:http://localhost:1234/v1}
+      chat:
+        options:
+          model: ${LLM_MODEL:unconfigured}   # read from GET /v1/models; never hardcoded (AGENTS.md)
+          temperature: 0.2   # low: reliability over creativity (plan §6.3)
 management:
   endpoints:
     web:
       base-path: /api/actuator   # keeps every backend URL under the single /api prefix (plan §6.1)
 cvchecker:
+  llm:
+    read-timeout: 10m   # a local model may answer over minutes (plan §6.3)
   jobs:
     max-concurrent: 1   # a local LLM processes one job at a time (plan §6.7)
   pipeline:
