@@ -7,6 +7,10 @@ spring:
   threads:
     virtual:
       enabled: true   # open SSE connections must not occupy the servlet thread pool (plan §4.1)
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 management:
   endpoints:
     web:

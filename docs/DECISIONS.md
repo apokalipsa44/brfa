@@ -10,3 +10,5 @@ Minor matters decided during implementation (plan §8: decide, then record one l
 | 2026-10-09 | ProblemDetail responses include a stable machine-readable `code` extension property | Lets the frontend show specific messages without parsing free text (M2) |
 | 2026-10-09 | Added `INTERNAL_ERROR` as catch-all pipeline error code | Plan names only PDF_NO_TEXT / PDF_UNREADABLE / LLM_INVALID_OUTPUT; unexpected exceptions still need a code (M2) |
 | 2026-10-09 | Result download filename: `cv-improved-{jobId}.pdf` | Deterministic, no personal data in the name (M2) |
+| 2026-10-09 | One lock per job (`CvJob.eventLock`) guards both stage transitions and event appends; SSE replay will use the same lock (plan §6.4/§6.6) | Single contention point keeps "no loss, no duplicates" trivially true; verified by an 8-thread × 250-event test (M3) |
+| 2026-10-09 | Boot 4 / Framework 7 API deltas: `@WebMvcTest` moved to `org.springframework.boot.webmvc.test.autoconfigure`, `ProblemDetail.setInstance` now takes a `URI` | Both broke compilation against the Boot 3.x habits; noted so M4+ tests don't rediscover them (M3) |
