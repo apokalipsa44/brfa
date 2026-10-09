@@ -1,0 +1,13 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: cv-checker-backend
+  threads:
+    virtual:
+      enabled: true   # open SSE connections must not occupy the servlet thread pool (plan §4.1)
+management:
+  endpoints:
+    web:
+      base-path: /api/actuator   # keeps every backend URL under the single /api prefix (plan §6.1)

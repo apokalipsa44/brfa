@@ -51,10 +51,19 @@ No tools missing or too old — nothing to install.
 
 - **DejaVu Sans** Regular + Bold present at `/usr/share/fonts/truetype/dejavu/` (`DejaVuSans.ttf`, `DejaVuSans-Bold.ttf`). Full Polish character set (`ąęłńóśźż`), free license allowing redistribution → will be copied into `backend/src/main/resources/fonts/` and registered with openhtmltopdf.
 
-## Pending decisions (plan §12)
+## Decisions (confirmed by user, 2026-10-09)
 
-Awaiting user answers before Milestone 1:
-1. Accept improved CV as a **new PDF from the ATS template** (original look not preserved)? — default yes
-2. Maven or Gradle? — default Maven + wrapper
-3. Which LM Studio model to use, and dominant CV language (PL/EN)?
-4. Show match score + changes list immediately on completion? — default yes
+| # | Decision | Answer |
+|---|---|---|
+| 1 | Improved CV format | New PDF from the ATS template (original look not preserved) |
+| 2 | Build tool | Maven + `mvnw` wrapper |
+| 3 | Default LLM model | `ista-daslab/qwen3.8-27b-gsq-rco-gguf/qwen3.8-27b-gsq-rco-iq3_s.gguf` (env var `LLM_MODEL`) |
+| 4 | Dominant CV language | English primarily (Polish character support still required in the PDF font) |
+| 5 | Completion report | Show match score + changes list on the job card, not just the file |
+
+## Dev environment (M1)
+
+- Backend runs on **:8080**; actuator base path is **`/api/actuator`** so every backend URL lives under the single `/api` prefix used by the plan's API contract.
+- Frontend dev server: port 4200 was occupied by another project's `ng serve`, so this app runs on **:4300** (`npm run start -- --port 4300`). If 4200 frees up, drop the flag and it returns to the default.
+- `frontend/proxy.conf.json` routes `/api/*` → `http://localhost:8080/api/*` (no path rewrite). Verified: `GET http://localhost:4300/api/actuator/health` → `{"status":"UP"}`.
+- ESLint added via `@angular-eslint/schematics` 22.5.0 (`npm run lint`).
