@@ -75,6 +75,11 @@ public class CvJob {
         return stage;
     }
 
+    /** True once the job reached COMPLETED or FAILED; emitters are closed at that point (plan §6.6). */
+    public boolean isTerminal() {
+        return stage == Stage.COMPLETED || stage == Stage.FAILED;
+    }
+
     public Instant createdAt() {
         return createdAt;
     }
@@ -106,5 +111,14 @@ public class CvJob {
     /** Snapshot of the event buffer. Caller must hold {@link #eventLock}. */
     List<JobEvent> eventsUnderLock() {
         return Collections.unmodifiableList(events);
+    }
+
+    /** Events with id greater than {@code afterId}. Caller must hold {@link #eventLock}. */
+    public List<JobEvent> eventsAfter(long afterId) {
+        List<JobEvent> result = new ArrayList<>();
+        for (JobEvent event : events) {
+            if (event.id() > afterId) result.add(event);
+        }
+        return result;
     }
 }

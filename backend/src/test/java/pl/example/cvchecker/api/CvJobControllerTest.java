@@ -13,6 +13,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import pl.example.cvchecker.job.CvJob;
 import pl.example.cvchecker.job.CvJobRegistry;
 import pl.example.cvchecker.job.Stage;
+import pl.example.cvchecker.pipeline.SimulatedPipeline;
+import pl.example.cvchecker.sse.SseHub;
 import pl.example.cvchecker.storage.TempFileStorage;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +39,12 @@ class CvJobControllerTest {
 
     @MockitoBean
     TempFileStorage storage;
+
+    @MockitoBean
+    SseHub hub;
+
+    @MockitoBean
+    SimulatedPipeline pipeline;
 
     @Test
     void validUploadReturns202AndRegistersQueuedJob() throws Exception {

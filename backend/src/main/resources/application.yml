@@ -15,3 +15,10 @@ management:
   endpoints:
     web:
       base-path: /api/actuator   # keeps every backend URL under the single /api prefix (plan §6.1)
+cvchecker:
+  jobs:
+    max-concurrent: 1   # a local LLM processes one job at a time (plan §6.7)
+  pipeline:
+    stage-delay: 2s     # simulated-pipeline delay per stage until real LLM steps land (M4; replaced in M7+)
+  sse:
+    heartbeat-interval: 15s

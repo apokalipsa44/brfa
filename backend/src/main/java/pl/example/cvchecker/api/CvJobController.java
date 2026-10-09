@@ -7,15 +7,21 @@ import java.util.UUID;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import pl.example.cvchecker.job.CvJob;
 import pl.example.cvchecker.job.CvJobRegistry;
 import pl.example.cvchecker.job.Stage;
+import pl.example.cvchecker.pipeline.SimulatedPipeline;
+import pl.example.cvchecker.sse.SseHub;
 import pl.example.cvchecker.storage.TempFileStorage;
 
 @RestController
@@ -27,10 +33,14 @@ public class CvJobController {
 
     private final CvJobRegistry registry;
     private final TempFileStorage storage;
+    private final SseHub hub;
+    private final SimulatedPipeline pipeline;
 
-    public CvJobController(CvJobRegistry registry, TempFileStorage storage) {
+    public CvJobController(CvJobRegistry registry, TempFileStorage storage, SseHub hub, SimulatedPipeline pipeline) {
         this.registry = registry;
         this.storage = storage;
+        this.hub = hub;
+        this.pipeline = pipeline;
     }
 
     /** Creates a job and returns immediately (202); processing happens asynchronously later. */
@@ -67,10 +77,29 @@ public class CvJobController {
         }
 
         CvJob job = new CvJob(jobId, jobDescription, originalFile);
-        job.appendStatus(Stage.QUEUED, "Queued for processing", 0);
         registry.create(job);
+        pipeline.start(job); // emits QUEUED and runs the stages asynchronously (plan §6.7)
 
         return ResponseEntity.accepted().body(new CreatedJobResponse(jobId, Stage.QUEUED));
+    }
+
+    /** SSE stream of job events (plan §6.6): replay from Last-Event-ID, then live events. */
+    @GetMapping(value = "/{jobId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter events(
+            @PathVariable String jobId,
+            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
+        CvJob job = registry.find(jobId).orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND",
+                "Job not found", "No CV job with this id (it may have expired)."));
+        return hub.subscribe(job, parseLastEventId(lastEventId));
+    }
+
+    private static long parseLastEventId(String header) {
+        if (header == null || header.isBlank()) return 0L;
+        try {
+            return Long.parseLong(header.trim());
+        } catch (NumberFormatException e) {
+            return 0L; // malformed id: replay from the beginning
+        }
     }
 
     /** Content-Type alone is not trusted: the %PDF- signature must be present (plan §6.5). */
