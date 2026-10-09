@@ -1,5 +1,6 @@
 package pl.example.cvchecker.job;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,5 +27,10 @@ public class InMemoryCvJobRegistry implements CvJobRegistry {
     @Override
     public boolean remove(String jobId) {
         return jobs.remove(jobId) != null;
+    }
+
+    @Override
+    public Collection<CvJob> findAll() {
+        return jobs.values();
     }
 }

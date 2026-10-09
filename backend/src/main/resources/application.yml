@@ -29,7 +29,11 @@ cvchecker:
     read-timeout: 10m   # a local model may answer over minutes (plan §6.3)
   jobs:
     max-concurrent: 1   # a local LLM processes one job at a time (plan §6.7)
+    ttl: 24h            # jobs and temp files older than this are removed by @Scheduled (M11)
   pipeline:
     stage-delay: 2s     # simulated-pipeline delay per stage until real LLM steps land (M4; replaced in M7+)
   sse:
     heartbeat-interval: 15s
+  pdf:
+    font-family: DejaVuSans
+    font-ttf: DejaVuSans.ttf
