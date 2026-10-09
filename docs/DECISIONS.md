@@ -14,3 +14,6 @@ Minor matters decided during implementation (plan §8: decide, then record one l
 | 2026-10-09 | Boot 4 / Framework 7 API deltas: `@WebMvcTest` moved to `org.springframework.boot.webmvc.test.autoconfigure`, `ProblemDetail.setInstance` now takes a `URI` | Both broke compilation against the Boot 3.x habits; noted so M4+ tests don't rediscover them (M3) |
 | 2026-10-09 | SseHub registers emitter callbacks before replay and unsubscribes terminal replays immediately | Otherwise a disconnect mid-replay misses cleanup and post-terminal subscribes leak in the map (M4) |
 | 2026-10-09 | SSE test parser tolerates `id:1` without space | Spring's SseEmitter writes `id:`/`event:` with no space after the colon (M4) |
+| 2026-10-09 | M5 refresh-resume uses localStorage job refs + SSE replay only, no GET snapshot call | Snapshot endpoint (docs/API.md) is not implemented on the backend yet; replay-then-close covers resume until M10 wires snapshot + result download (M5) |
+| 2026-10-09 | M5 job card hides Download and shows a demo note while `report` is null | Simulated pipeline has no result PDF; a download link would 404 until M10 (M5) |
+| 2026-10-09 | Upload form owns the POST lifecycle (reactive `FormControl` for the posting, file via signal) | Signal Forms stability unchecked (no MCP in this session); reactive forms are the stable documented API (M5) |
