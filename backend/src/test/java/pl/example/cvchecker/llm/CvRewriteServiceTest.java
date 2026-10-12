@@ -47,7 +47,7 @@ class CvRewriteServiceTest {
         CvRewriteResult good = rewrite();
         when(call.entity(CvRewriteResult.class)).thenReturn(good);
 
-        assertThat(service.rewrite("cv", "job", analysis())).isEqualTo(good);
+        assertThat(service.rewrite("cv", "job", evaluation(), approved(), null)).isEqualTo(good);
     }
 
     @Test
@@ -56,7 +56,8 @@ class CvRewriteServiceTest {
                 .thenReturn(new CvRewriteResult(null, List.of()))
                 .thenReturn(rewrite());
 
-        assertThat(service.rewrite("cv", "job", analysis()).document().fullName()).isEqualTo("Jan Kowalski");
+        assertThat(service.rewrite("cv", "job", evaluation(), approved(), null).document().fullName())
+                .isEqualTo("Jan Kowalski");
         verify(call, times(2)).entity(CvRewriteResult.class);
     }
 
@@ -64,7 +65,7 @@ class CvRewriteServiceTest {
     void failsAfterMaxAttempts() {
         when(call.entity(eq(CvRewriteResult.class))).thenReturn(new CvRewriteResult(null, List.of()));
 
-        assertThatThrownBy(() -> service.rewrite("cv", "job", analysis()))
+        assertThatThrownBy(() -> service.rewrite("cv", "job", evaluation(), approved(), null))
                 .isInstanceOf(LlmInvalidOutputException.class);
         verify(call, times(3)).entity(CvRewriteResult.class);
     }
@@ -80,9 +81,15 @@ class CvRewriteServiceTest {
                 .isInstanceOf(LlmInvalidOutputException.class);
     }
 
-    private static CvAnalysis analysis() {
-        return new CvAnalysis(58, List.of("Java"), List.of("Kubernetes"),
-                List.of(new Suggestion("Skills", "Missing K8s", "Learn K8s", Priority.MEDIUM)), "Solid match.");
+    private static Evaluation evaluation() {
+        return new Evaluation("Acme", "Senior Java Developer", 58, List.of("Java"), List.of("Kubernetes"),
+                List.of(new Suggestion("Skills", "Missing K8s", "Group container skills", "Docker",
+                        "Docker, Kubernetes (basics)", Priority.MEDIUM)),
+                "Solid match.");
+    }
+
+    private static List<Suggestion> approved() {
+        return evaluation().suggestions();
     }
 
     private static CvRewriteResult rewrite() {

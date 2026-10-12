@@ -1,6 +1,8 @@
 {
   "type": "object",
   "properties": {
+    "employer": { "type": "string" },
+    "position": { "type": "string" },
     "matchScore": { "type": "integer" },
     "matchedKeywords": { "type": "array", "items": { "type": "string" } },
     "missingKeywords": { "type": "array", "items": { "type": "string" } },
@@ -11,15 +13,17 @@
         "properties": {
           "section": { "type": "string" },
           "problem": { "type": "string" },
-          "recommendation": { "type": "string" },
+          "proposal": { "type": "string" },
+          "before": { "type": "string" },
+          "after": { "type": "string" },
           "priority": { "enum": ["HIGH", "MEDIUM", "LOW"] }
         },
-        "required": ["section", "problem", "recommendation", "priority"],
+        "required": ["section", "problem", "proposal", "before", "after", "priority"],
         "additionalProperties": false
       }
     },
     "summary": { "type": "string" }
   },
-  "required": ["matchScore", "matchedKeywords", "missingKeywords", "suggestions", "summary"],
+  "required": ["employer", "position", "matchScore", "matchedKeywords", "missingKeywords", "suggestions", "summary"],
   "additionalProperties": false
 }

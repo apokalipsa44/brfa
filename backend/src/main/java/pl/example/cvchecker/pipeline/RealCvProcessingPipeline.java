@@ -12,10 +12,10 @@ import pl.example.cvchecker.job.CvJob;
 import pl.example.cvchecker.job.JobEvent;
 import pl.example.cvchecker.job.JobReport;
 import pl.example.cvchecker.job.Stage;
-import pl.example.cvchecker.llm.CvAnalysis;
-import pl.example.cvchecker.llm.CvAnalysisService;
 import pl.example.cvchecker.llm.CvRewriteResult;
 import pl.example.cvchecker.llm.CvRewriteService;
+import pl.example.cvchecker.llm.Evaluation;
+import pl.example.cvchecker.llm.EvaluationService;
 import pl.example.cvchecker.llm.LlmInvalidOutputException;
 import pl.example.cvchecker.pdf.CvPdfRenderer;
 import pl.example.cvchecker.pdf.PdfNoTextException;
@@ -36,16 +36,16 @@ public class RealCvProcessingPipeline implements CvProcessingPipeline {
     private static final Logger log = LoggerFactory.getLogger(RealCvProcessingPipeline.class);
 
     private final PdfTextExtractor extractor;
-    private final CvAnalysisService analysisService;
+    private final EvaluationService evaluationService;
     private final CvRewriteService rewriteService;
     private final CvPdfRenderer renderer;
     private final SseHub hub;
     private final TempFileStorage storage;
 
-    public RealCvProcessingPipeline(PdfTextExtractor extractor, CvAnalysisService analysisService,
+    public RealCvProcessingPipeline(PdfTextExtractor extractor, EvaluationService evaluationService,
             CvRewriteService rewriteService, CvPdfRenderer renderer, SseHub hub, TempFileStorage storage) {
         this.extractor = extractor;
-        this.analysisService = analysisService;
+        this.evaluationService = evaluationService;
         this.rewriteService = rewriteService;
         this.renderer = renderer;
         this.hub = hub;
@@ -63,14 +63,15 @@ public class RealCvProcessingPipeline implements CvProcessingPipeline {
             String cvText = extractor.extract(job.originalFile());
 
             append(job, Stage.ANALYZING, "Analyzing CV match against the job posting", 35);
-            CvAnalysis analysis = analysisService.analyze(cvText, job.jobDescription(), job.model());
-            job.setAnalysis(analysis);
+            Evaluation evaluation = evaluationService.evaluate(cvText, job.jobDescription(), job.model());
+            job.setAnalysis(evaluation);
 
             append(job, Stage.REWRITING, "Rewriting sections with targeted improvements", 65);
-            CvRewriteResult rewrite = rewriteService.rewrite(cvText, job.jobDescription(), analysis, job.model());
+            CvRewriteResult rewrite = rewriteService.rewrite(cvText, job.jobDescription(), evaluation,
+                    evaluation.suggestions(), job.model());
             job.setRewriteResult(rewrite);
-            job.setReport(new JobReport(analysis.matchScore(), analysis.matchedKeywords(),
-                    analysis.missingKeywords(), analysis.suggestions(), analysis.summary(), rewrite.changes()));
+            job.setReport(new JobReport(evaluation.matchScore(), evaluation.matchedKeywords(),
+                    evaluation.missingKeywords(), evaluation.suggestions(), evaluation.summary(), rewrite.changes()));
 
             append(job, Stage.GENERATING_PDF, "Generating the improved PDF from the ATS template", 90);
             Path result = storage.root().resolve(job.id() + "-result.pdf");

@@ -38,7 +38,7 @@ No tools missing or too old — nothing to install.
 | `qwen2.5-coder-32b-instruct` / `qwen2.5-coder-14b-instruct` | coder instruct | older generation |
 | `text-embedding-nomic-embed-text-v1.5` | embeddings | not needed for this project |
 
-- **JSON schema mode: supported.** Probe with `response_format: {"type":"json_schema", ...}` returned valid JSON (`{"ok": true}`, finish_reason `stop`) in ~8 s on the 27B model. We will use it for structured output (analysis + rewrite) and keep validation + retry as a safety net per plan §6.7.
+- **JSON schema mode: supported.** Probe with `response_format: {"type":"json_schema", ...}` returned valid JSON (`{"ok": true}`, finish_reason `stop`) in ~8 s on the 27B model. **Enabled in code as of 2026-10-09**: both analysis and rewrite services send a strict schema (`prompts/analysis.schema.json`, `prompts/rewrite.schema.json`) so LM Studio cannot emit structurally invalid JSON; validation + retry (with a corrective hint) remain as the safety net per plan §6.7.
 - Model is configurable via env var `LLM_MODEL` (and `LLM_BASE_URL`), so swapping to another model/hosted API later needs no code change.
 
 ## Angular MCP (`ng mcp`)

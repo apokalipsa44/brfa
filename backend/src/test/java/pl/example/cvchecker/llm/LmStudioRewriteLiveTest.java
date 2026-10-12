@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LmStudioRewriteLiveTest {
 
     @Autowired
-    CvAnalysisService analysisService;
+    EvaluationService evaluationService;
 
     @Autowired
     CvRewriteService rewriteService;
@@ -36,10 +36,10 @@ class LmStudioRewriteLiveTest {
         String job = "Senior Java Developer wanted: Java, Spring Boot, Kubernetes, English B2. "
                 + "Deploy and operate services on Kubernetes clusters.";
 
-        CvAnalysis analysis = analysisService.analyze(cv, job);
-        assertThat(analysis.missingKeywords().toString().toLowerCase()).contains("kubernetes");
+        Evaluation evaluation = evaluationService.evaluate(cv, job);
+        assertThat(evaluation.missingKeywords().toString().toLowerCase()).contains("kubernetes");
 
-        CvRewriteResult result = rewriteService.rewrite(cv, job, analysis);
+        CvRewriteResult result = rewriteService.rewrite(cv, job, evaluation, evaluation.suggestions(), null);
 
         assertThat(result.document().fullName()).containsIgnoringCase("Kowalski");
         assertThat(result.changes()).isNotEmpty();

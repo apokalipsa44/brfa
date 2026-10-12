@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import pl.example.cvchecker.llm.CvAnalysis;
 import pl.example.cvchecker.llm.CvRewriteResult;
+import pl.example.cvchecker.llm.Evaluation;
 
 /**
  * In-memory state of one CV job (plan §6.4). Thread-safe: stage transitions and event
@@ -30,7 +30,7 @@ public class CvJob {
     private volatile Stage stage = Stage.QUEUED;
     private volatile Integer progress = 0;
     private volatile Path resultFile;
-    private volatile CvAnalysis analysis;
+    private volatile Evaluation analysis;
     private volatile CvRewriteResult rewriteResult;
     private volatile JobReport report;
     private volatile String errorCode;
@@ -121,7 +121,7 @@ public class CvJob {
         return event;
     }
 
-    public void setAnalysis(CvAnalysis analysis) {
+    public void setAnalysis(Evaluation analysis) {
         this.analysis = analysis;
     }
 
@@ -181,7 +181,7 @@ public class CvJob {
         return model;
     }
 
-    public CvAnalysis analysis() {
+    public Evaluation analysis() {
         return analysis;
     }
 

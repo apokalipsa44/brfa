@@ -1,0 +1,302 @@
+package pl.example.cvchecker.api;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+import pl.example.cvchecker.analysis.Analysis;
+import pl.example.cvchecker.analysis.AnalysisPipeline;
+import pl.example.cvchecker.analysis.AnalysisRegistry;
+import pl.example.cvchecker.analysis.AnalysisStage;
+import pl.example.cvchecker.llm.Evaluation;
+import pl.example.cvchecker.llm.ModelContextService;
+import pl.example.cvchecker.llm.Priority;
+import pl.example.cvchecker.llm.Suggestion;
+import pl.example.cvchecker.pdf.TestPdfs;
+import pl.example.cvchecker.storage.CvContext;
+import pl.example.cvchecker.storage.CvContextStore;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Contract of the analyses endpoints (docs/API.md §4). The registry and pipeline live behind
+ * interfaces/HashMap, so this slice exercises validation, stage gates and error codes offline.
+ */
+@WebMvcTest(AnalysisController.class)
+class AnalysisControllerTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @MockitoBean
+    AnalysisRegistry registry;
+
+    @MockitoBean
+    AnalysisPipeline pipeline;
+
+    @MockitoBean
+    CvContextStore cvStore;
+
+    @MockitoBean
+    ModelContextService models;
+
+    private static CvContext cv() {
+        return new CvContext("cv-1", "cv.pdf", "Jan Kowalski, Java", 10, Instant.now(), Path.of("/tmp/cv.pdf"));
+    }
+
+    private static Evaluation evaluation() {
+        return new Evaluation("Acme", "Senior Java Developer", 58, List.of("Java"), List.of("Kubernetes"),
+                List.of(new Suggestion("Skills", "Missing K8s", "Group container skills", "Docker",
+                        "Docker, Kubernetes (basics)", Priority.HIGH)),
+                "Solid match.");
+    }
+
+    /** An analysis stopped at the review gate, with one suggestion (id s1) and score 58. */
+    private static Analysis awaitingReview() {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "Jan Kowalski, Java", "job", "qwen/iq3_s.gguf");
+        analysis.setEvaluation(evaluation());
+        analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
+        return analysis;
+    }
+
+    @Test
+    void validCreateReturns202Queued() throws Exception {
+        when(cvStore.current()).thenReturn(Optional.of(cv()));
+        when(models.isReady()).thenReturn(true);
+        when(models.activeModelId()).thenReturn("qwen/iq3_s.gguf");
+
+        mvc.perform(post("/api/analyses").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"jobPosting\":\"Senior Java Developer wanted\"}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.stage").value("QUEUED"))
+                .andExpect(jsonPath("$.progress").value(0))
+                .andExpect(jsonPath("$.score").doesNotExist());
+
+        verify(registry).create(any(Analysis.class));
+        verify(pipeline).start(any(Analysis.class));
+    }
+
+    @Test
+    void blankPostingReturns400() throws Exception {
+        mvc.perform(post("/api/analyses").contentType(MediaType.APPLICATION_JSON).content("{\"jobPosting\":\"  \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MISSING_JOB_DESCRIPTION"));
+    }
+
+    @Test
+    void tooLongPostingReturns400() throws Exception {
+        String longPosting = "x".repeat(20_001);
+        mvc.perform(post("/api/analyses").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"jobPosting\":\"" + longPosting + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("JOB_DESCRIPTION_TOO_LONG"));
+    }
+
+    @Test
+    void createWithoutCvReturns422() throws Exception {
+        when(cvStore.current()).thenReturn(Optional.empty());
+
+        mvc.perform(post("/api/analyses").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"jobPosting\":\"Senior Java Developer\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("CV_MISSING"));
+    }
+
+    @Test
+    void createWithModelNotReadyReturns422() throws Exception {
+        when(cvStore.current()).thenReturn(Optional.of(cv()));
+        when(models.isReady()).thenReturn(false);
+
+        mvc.perform(post("/api/analyses").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"jobPosting\":\"Senior Java Developer\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("MODEL_NOT_READY"));
+    }
+
+    @Test
+    void listReturnsNewestFirst() throws Exception {
+        Analysis older = new Analysis("a1", "cv.pdf", "text", "job", "qwen");
+        Analysis newer = new Analysis("a2", "cv.pdf", "text", "job", "qwen");
+        when(registry.findAll()).thenReturn(List.of(older, newer));
+
+        mvc.perform(get("/api/analyses"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value("a2"))
+                .andExpect(jsonPath("$[1].id").value("a1"));
+    }
+
+    @Test
+    void detailReturnsEvaluationFields() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(get("/api/analyses/a1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Acme · Senior Java Developer"))
+                .andExpect(jsonPath("$.stage").value("AWAITING_REVIEW"))
+                .andExpect(jsonPath("$.score").value(58))
+                .andExpect(jsonPath("$.modelId").value("qwen/iq3_s.gguf"))
+                .andExpect(jsonPath("$.suggestions[0].id").value("s1"))
+                .andExpect(jsonPath("$.suggestions[0].priority").value("HIGH"))
+                .andExpect(jsonPath("$.suggestions[0].proposal").exists())
+                .andExpect(jsonPath("$.resultUrl").doesNotExist());
+    }
+
+    @Test
+    void detailUnknownReturns404() throws Exception {
+        when(registry.find("nope")).thenReturn(Optional.empty());
+
+        mvc.perform(get("/api/analyses/nope"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ANALYSIS_NOT_FOUND"));
+    }
+
+    @Test
+    void renameBlankReturns400() throws Exception {
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"  \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TITLE_BLANK"));
+    }
+
+    @Test
+    void renameReturnsUpdatedSummary() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Latest job — Acme\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Latest job — Acme"))
+                .andExpect(jsonPath("$.stage").value("AWAITING_REVIEW"));
+    }
+
+    @Test
+    void applyWhileNotAwaitingReviewReturns409() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(new Analysis("a1", "cv.pdf", "text", "job", "qwen")));
+
+        mvc.perform(post("/api/analyses/a1/apply").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"approvedSuggestionIds\":[\"s1\"]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NOT_AWAITING_REVIEW"));
+    }
+
+    @Test
+    void applyWithEmptyListReturns422() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(post("/api/analyses/a1/apply").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"approvedSuggestionIds\":[]}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("NO_SUGGESTIONS_APPROVED"));
+    }
+
+    @Test
+    void applyWithUnknownIdsReturns422() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(post("/api/analyses/a1/apply").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"approvedSuggestionIds\":[\"s9\"]}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("NO_SUGGESTIONS_APPROVED"));
+    }
+
+    @Test
+    void applyValidReturns202Rewriting() throws Exception {
+        Analysis analysis = awaitingReview();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(post("/api/analyses/a1/apply").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"approvedSuggestionIds\":[\"s1\"]}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.stage").value("REWRITING"))
+                .andExpect(jsonPath("$.progress").value(65));
+
+        verify(pipeline).apply(analysis);
+    }
+
+    @Test
+    void retryWhileNotFailedReturns409() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(post("/api/analyses/a1/retry"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NOT_FAILED"));
+    }
+
+    @Test
+    void retryFailedReturns202BackAtFailedStage() throws Exception {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "text", "job", "qwen");
+        analysis.fail("LLM_INVALID_OUTPUT", "boom", AnalysisStage.EVALUATING);
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(post("/api/analyses/a1/retry"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.stage").value("EVALUATING"))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
+
+        verify(pipeline).retry(analysis);
+    }
+
+    @Test
+    void resultBeforeCompletionReturns409() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(get("/api/analyses/a1/result"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NOT_READY"));
+    }
+
+    @Test
+    void resultCompletedServesPdf() throws Exception {
+        Path file = Files.createTempFile("analysis-result-", ".pdf");
+        Files.write(file, TestPdfs.pdf("Improved CV"));
+        Analysis analysis = new Analysis("a1", "cv.pdf", "text", "job", "qwen");
+        analysis.setResultFile(file);
+        analysis.complete();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(get("/api/analyses/a1/result"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", MediaType.APPLICATION_PDF_VALUE))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("cv-improved-a1.pdf")));
+    }
+
+    @Test
+    void deleteUnknownReturns404() throws Exception {
+        when(registry.find("nope")).thenReturn(Optional.empty());
+
+        mvc.perform(delete("/api/analyses/nope"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ANALYSIS_NOT_FOUND"));
+    }
+
+    @Test
+    void deleteRemovesAndReturns204() throws Exception {
+        Analysis analysis = awaitingReview();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(delete("/api/analyses/a1")).andExpect(status().isNoContent());
+
+        verify(registry).remove("a1");
+        verify(pipeline, never()).apply(any());
+    }
+}

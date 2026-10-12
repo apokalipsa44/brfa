@@ -24,12 +24,12 @@ import pl.example.cvchecker.job.CvJob;
 import pl.example.cvchecker.job.CvJobRegistry;
 import pl.example.cvchecker.job.JobReport;
 import pl.example.cvchecker.job.Stage;
-import pl.example.cvchecker.llm.CvAnalysis;
-import pl.example.cvchecker.llm.CvAnalysisService;
 import pl.example.cvchecker.llm.CvChange;
 import pl.example.cvchecker.llm.CvDocument;
 import pl.example.cvchecker.llm.CvRewriteResult;
 import pl.example.cvchecker.llm.CvRewriteService;
+import pl.example.cvchecker.llm.Evaluation;
+import pl.example.cvchecker.llm.EvaluationService;
 import pl.example.cvchecker.llm.ExperienceEntry;
 import pl.example.cvchecker.llm.Priority;
 import pl.example.cvchecker.llm.Suggestion;
@@ -74,7 +74,7 @@ class RealCvProcessingPipelineTest {
     PdfTextExtractor extractor;
 
     @MockitoBean
-    CvAnalysisService analysisService;
+    EvaluationService evaluationService;
 
     @MockitoBean
     CvRewriteService rewriteService;
@@ -85,8 +85,8 @@ class RealCvProcessingPipelineTest {
         CvJob job = new CvJob("pipeline-test-1", "Senior Java Developer wanted", original, "google/gemma-4-e4b");
         registry.create(job);
 
-        when(analysisService.analyze(anyString(), anyString(), any())).thenReturn(analysis());
-        when(rewriteService.rewrite(anyString(), anyString(), any(), any())).thenReturn(rewrite());
+        when(evaluationService.evaluate(anyString(), anyString(), any())).thenReturn(evaluation());
+        when(rewriteService.rewrite(anyString(), anyString(), any(), any(), any())).thenReturn(rewrite());
 
         pipeline.start(job);
 
@@ -118,9 +118,10 @@ class RealCvProcessingPipelineTest {
         assertThat(job.errorCode()).isEqualTo("PDF_UNREADABLE");
     }
 
-    private static CvAnalysis analysis() {
-        return new CvAnalysis(58, List.of("Java", "Spring"), List.of("Kubernetes"),
-                List.of(new Suggestion("Skills", "Missing K8s", "Add a K8s course", Priority.MEDIUM)),
+    private static Evaluation evaluation() {
+        return new Evaluation("Acme", "Senior Java Developer", 58, List.of("Java", "Spring"), List.of("Kubernetes"),
+                List.of(new Suggestion("Skills", "Missing K8s", "Group container skills", "Docker",
+                        "Docker, Kubernetes (basics)", Priority.MEDIUM)),
                 "Solid match, missing Kubernetes.");
     }
 

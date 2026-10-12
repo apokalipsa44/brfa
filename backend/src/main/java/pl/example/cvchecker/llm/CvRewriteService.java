@@ -2,6 +2,7 @@ package pl.example.cvchecker.llm;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,8 +16,9 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * LLM step #2: rewrites the CV from its text, the posting and the analysis
- * (plan §6.7). CV/posting text is untrusted input: delimited, never logged.
+ * LLM step #2: rewrites the CV from its text, the posting and the suggestions the user approved
+ * (docs/API.md §6.1: the rewrite must apply only those — nothing else). CV/posting text is untrusted
+ * input: delimited, never logged.
  */
 @Component
 public class CvRewriteService {
@@ -30,6 +32,10 @@ public class CvRewriteService {
 
     /** Rewrite/analysis JSON plus corrective retries must not hit LM Studio's default output cap. */
     private static final int MAX_OUTPUT_TOKENS = 8192;
+
+    /** The user-approved suggestions plus the title context, serialized into the prompt. */
+    private record RewriteContext(String employer, String position, List<Suggestion> approvedSuggestions) {
+    }
 
     private final ChatClient chat;
     private final ObjectMapper mapper;
@@ -49,24 +55,24 @@ public class CvRewriteService {
         }
     }
 
-    public CvRewriteResult rewrite(String cvText, String jobDescription, CvAnalysis analysis) {
-        return rewrite(cvText, jobDescription, analysis, null);
-    }
-
     /**
-     * @param model optional per-job model override (frontend dropdown). When blank, the model from
-     *              {@code spring.ai.openai.chat.options.model} (env {@code LLM_MODEL}) is used.
+     * @param evaluation          step-1 {@link Evaluation} whose employer/position give the title context
+     * @param approvedSuggestions the user-approved suggestions; only these may be applied
+     * @param model               primary model id (snapshotted at analysis creation), or blank for the default
      */
-    public CvRewriteResult rewrite(String cvText, String jobDescription, CvAnalysis analysis, String model) {
-        String analysisJson;
+    public CvRewriteResult rewrite(String cvText, String jobDescription, Evaluation evaluation,
+            List<Suggestion> approvedSuggestions, String model) {
+        String contextJson;
         try {
-            analysisJson = mapper.writeValueAsString(analysis);
+            List<Suggestion> approved = approvedSuggestions == null ? List.of() : approvedSuggestions;
+            contextJson = mapper.writeValueAsString(new RewriteContext(
+                    blankToNull(evaluation.employer()), blankToNull(evaluation.position()), approved));
         } catch (Exception e) {
-            throw new IllegalStateException("Cannot serialize CvAnalysis for the rewrite prompt.", e);
+            throw new IllegalStateException("Cannot serialize approved suggestions for the rewrite prompt.", e);
         }
         String prompt = basePrompt
-                + "\n<cv>\n" + truncate(cvText) + "\n</cv>\n<job>\n" + jobDescription + "\n</job>\n<analysis>\n"
-                + analysisJson + "\n</analysis>";
+                + "\n<cv>\n" + truncate(cvText) + "\n</cv>\n<job>\n" + jobDescription + "\n</job>\n"
+                + "<approved-suggestions>\n" + contextJson + "\n</approved-suggestions>";
         Exception lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
@@ -103,6 +109,10 @@ public class CvRewriteService {
         if (document.fullName() == null || document.fullName().isBlank() || !hasContent) {
             throw new LlmInvalidOutputException("Rewrite failed validation (empty name/content).", null);
         }
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     /** Attempts ≥ 2 get a corrective hint (plan §6.7): the model must re-emit truly minimal JSON. */

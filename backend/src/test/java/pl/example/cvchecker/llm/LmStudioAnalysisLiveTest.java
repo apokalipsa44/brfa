@@ -8,7 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Live check against LM Studio (milestone 7 acceptance): real {@link CvAnalysis} from the local
+ * Live check against LM Studio (milestone 7 acceptance): real {@link Evaluation} from the local
  * model over HTTP/1.1. Slow (minutes on a 27B model), so it only runs with
  * {@code LM_STUDIO_LIVE=1} and {@code LLM_MODEL} set, never in the default suite.
  */
@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LmStudioAnalysisLiveTest {
 
     @Autowired
-    CvAnalysisService service;
+    EvaluationService service;
 
     @Test
     void realAnalysisFromLocalModel() {
@@ -28,11 +28,11 @@ class LmStudioAnalysisLiveTest {
                 """;
         String job = "Senior Java Developer wanted: Java, Spring Boot, Kubernetes, English B2.";
 
-        CvAnalysis analysis = service.analyze(cv, job);
+        Evaluation evaluation = service.evaluate(cv, job);
 
-        assertThat(analysis.matchScore()).isBetween(0, 100);
-        assertThat(analysis.summary()).isNotBlank();
-        assertThat(analysis.matchedKeywords()).isNotEmpty();
-        assertThat(analysis.suggestions()).isNotEmpty();
+        assertThat(evaluation.matchScore()).isBetween(0, 100);
+        assertThat(evaluation.summary()).isNotBlank();
+        assertThat(evaluation.matchedKeywords()).isNotEmpty();
+        assertThat(evaluation.suggestions()).isNotEmpty();
     }
 }
