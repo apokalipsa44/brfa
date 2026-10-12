@@ -1,5 +1,6 @@
 # Java / Maven (backend)
 backend/target/
+backend/data/
 *.class
 
 # Node / Angular (frontend)

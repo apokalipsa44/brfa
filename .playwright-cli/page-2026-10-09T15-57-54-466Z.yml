@@ -1,0 +1,16 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - heading "CV Checker" [level=1] [ref=e6]
+    - paragraph [ref=e7]: ATS-friendly CV improvements.
+  - generic [ref=e9]:
+    - heading "Check your CV" [level=2] [ref=e10]
+    - paragraph [ref=e11]: Upload a PDF CV and paste the job posting. Analysis runs in the background — you can submit more CVs while waiting.
+    - generic [ref=e12]:
+      - paragraph [ref=e13]: Drag a PDF here or
+      - button "choose a file" [ref=e14]
+    - generic [ref=e15]: Job posting
+    - textbox "Job posting" [ref=e16]:
+      - /placeholder: Paste the job posting text here…
+    - paragraph [ref=e17]: 0 / 20000 characters
+    - button "Submit for analysis" [disabled] [ref=e18]
+  - paragraph [ref=e20]: No jobs yet. Submit a CV above to start.

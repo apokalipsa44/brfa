@@ -1,0 +1,95 @@
+Dołącz do zespołu rozwijającego jedną z największych platform e-commerce B2B w Europie, obsługującą miliony produktów i klientów biznesowych w ponad 20 krajach. Jako Full Stack Software Engineer będziesz projektować, rozwijać i utrzymywać nowoczesne rozwiązania backendowe i frontendowe wspierające kluczowe procesy sprzedażowe. Wspólnie będziemy tworzyć skalowalną platformę opartą o mikroserwisy i nowoczesne technologie, stanowiącą fundament międzynarodowego rozwoju firmy.
+
+Stanowisko
+
+Fullstack Software Engineer
+
+Zakres obowiązków
+
+Projektowanie, rozwój i utrzymanie rozwiązań Full Stack obejmujących zarówno backend, jak i frontend.
+
+Tworzenie nowoczesnych, responsywnych i intuicyjnych interfejsów użytkownika.
+
+Rozwój oraz utrzymanie wysokowydajnych usług backendowych wspierających kluczowe procesy biznesowe.
+
+Zapewnianie wysokiej wydajności, skalowalności i dostępności systemów.
+
+Monitorowanie aplikacji i usług, wdrażanie mechanizmów alertowania oraz proaktywne rozwiązywanie problemów.
+
+Projektowanie skalowalnej architektury opartej na mikroserwisach oraz dbanie o bezpieczeństwo, niezawodność i jakość dostarczanych rozwiązań.
+
+Współpraca w interdyscyplinarnych, autonomicznych zespołach produktowych.
+
+Odpowiedzialność za rozwój rozwiązań w całym ich cyklu życia.
+
+Optymalizacja infrastruktury i wykorzystania zasobów chmurowych przy zachowaniu efektywności kosztowej.
+
+Wymagania
+
+Minimum 5 lat doświadczenia zawodowego na stanowisku Full Stack Software Engineer lub Software Engineer.
+
+Bardzo dobra znajomość Java 11+ i Spring Boot oraz/lub TypeScript i React poparta doświadczeniem komercyjnym.
+
+Dobra znajomość REST API oraz integracji frontend-backend.
+
+Doświadczenie w pracy z bazami danych, w szczególności PostgreSQL.
+
+Znajomość nowoczesnych narzędzi i praktyk wytwarzania oprogramowania, takich jak GitLab, Jira, SonarQube, Kubernetes, Grafana, CI/CD oraz architektura mikroserwisowa.
+
+Doświadczenie w tworzeniu testów automatycznych (unit, integration, end-to-end).
+
+Doświadczenie w pracy z komunikacją asynchroniczną oraz systemami rozproszonymi.
+
+Znajomość zagadnień związanych z architekturą oprogramowania i wzorcami projektowymi.
+
+Umiejętność prowadzenia merytorycznych dyskusji technicznych i efektywnej współpracy zespołowej.
+
+Znajomość języka angielskiego na poziomie minimum B2.
+
+Mile widziane
+
+Doświadczenie w pracy z platformami event streamingowymi (np. Kafka).
+
+Znajomość technologii wyszukiwania, takich jak Elasticsearch lub Solr.
+
+Doświadczenie w pracy z platformami chmurowymi (AWS, Azure lub GCP).
+
+ 
+
+Co oferujemy
+
+Pracę hybrydową w biurze (biuro w Warszawie przy stacji metra Młociny).
+
+Zatrudnienie w oparciu o umowę o pracę.
+
+Możliwość rozwoju zawodowego w strukturach wewnętrznych.
+
+Możliwość skorzystania z benefitów pozapłacowych na preferencyjnych warunkach.
+
+Zniżkę pracowniczą na części samochodowe grupy Inter Cars.
+
+Szkolenia wewnętrzne i zewnętrzne rozwijające kompetencje miękkie i techniczne.
+
+Dofinansowane do zajęć z języka angielskiego.
+
+Tech stack
+Java
+advanced
+Spring Boot
+advanced
+React
+advanced
+TypeScript
+advanced
+REST API
+regular
+PostgreSQL
+regular
+GitLab
+regular
+Jira
+regular
+SonarQube
+regular
+Kubernetes
+regular

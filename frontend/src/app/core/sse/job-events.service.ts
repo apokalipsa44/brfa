@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Stage } from '../job.model';
+import { JobReport, Stage } from '../job.model';
 
 export interface StatusPayload {
   jobId: string;
@@ -13,7 +13,7 @@ export interface CompletedPayload {
   stage: 'COMPLETED';
   progress: number;
   resultUrl: string;
-  report: unknown;
+  report: JobReport | null;
 }
 
 export interface FailedPayload {

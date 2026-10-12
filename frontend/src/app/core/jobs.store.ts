@@ -1,22 +1,18 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { Job, Stage } from './job.model';
+import { Job, STAGE_LABELS } from './job.model';
+import { CvJobsApi, JobSnapshot } from './api/cv-jobs.api';
 import { CompletedPayload, FailedPayload, JobEventsService, StatusPayload } from './sse/job-events.service';
 
-interface StoredJobRef {
-  jobId: string;
-  fileName: string;
-}
-
-const STORAGE_KEY = 'cvchecker.jobs.v1';
-
 /**
- * Signal-based job registry (plan §8.3 core/jobs.store.ts): the single source
- * of state for the job list. Updated live from SSE; never blocks the UI —
- * uploads return immediately and each card tracks its own progress (plan §8.4).
+ * Signal-based job registry (plan §8.3 core/jobs.store.ts): the single source of state for the job
+ * list. The recent history comes from the backend (docs/API.md §8) so it survives a page refresh
+ * *and* a backend restart; live updates arrive over SSE. Never blocks the UI — uploads return
+ * immediately and each card tracks its own progress (plan §8.4).
  */
 @Injectable({ providedIn: 'root' })
 export class JobsStore {
   private readonly events = inject(JobEventsService);
+  private readonly api = inject(CvJobsApi);
 
   private readonly _jobs = signal<Job[]>([]);
   private readonly _toast = signal<string | null>(null);
@@ -26,7 +22,7 @@ export class JobsStore {
   readonly activeCount = computed(() => this._jobs().filter((job) => !isDone(job)).length);
 
   constructor() {
-    this.resumeStored();
+    this.restoreFromBackend();
   }
 
   /** Registers a freshly created (202) job and opens its SSE stream. */
@@ -36,37 +32,32 @@ export class JobsStore {
       { jobId, fileName, stage: 'QUEUED', message: 'Queued for processing', progress: 0, reconnecting: false },
       ...jobs,
     ]);
-    this.persist();
     this.watch(jobId);
   }
 
   remove(jobId: string): void {
     this.events.unwatch(jobId);
     this._jobs.update((jobs) => jobs.filter((job) => job.jobId !== jobId));
-    this.persist();
+    this.api.deleteJob(jobId).subscribe({ error: () => { /* already gone server-side */ } });
   }
 
   dismissToast(): void {
     this._toast.set(null);
   }
 
-  /** Re-opens SSE streams for jobs stored before a page refresh (plan §8.5). */
-  private resumeStored(): void {
-    for (const ref of readStored()) {
-      if (this._jobs().some((job) => job.jobId === ref.jobId)) continue;
-      this._jobs.update((jobs) => [
-        ...jobs,
-        {
-          jobId: ref.jobId,
-          fileName: ref.fileName,
-          stage: 'QUEUED' as Stage,
-          message: 'Resuming…',
-          progress: 0,
-          reconnecting: false,
-        },
-      ]);
-      this.watch(ref.jobId);
-    }
+  /** Loads the persisted job list from the backend; resumes SSE for jobs still running. */
+  private restoreFromBackend(): void {
+    this.api.listJobs().subscribe({
+      next: (snapshots) => {
+        for (const snapshot of snapshots) {
+          if (this._jobs().some((job) => job.jobId === snapshot.jobId)) continue;
+          const job = toJob(snapshot);
+          this._jobs.update((jobs) => [...jobs, job]);
+          if (!isDone(job)) this.watch(job.jobId);
+        }
+      },
+      error: () => { /* backend unavailable: history stays empty, uploads still work */ },
+    });
   }
 
   private watch(jobId: string): void {
@@ -99,32 +90,25 @@ export class JobsStore {
   private patch(jobId: string, partial: Partial<Job>): void {
     this._jobs.update((jobs) => jobs.map((job) => (job.jobId === jobId ? { ...job, ...partial } : job)));
   }
-
-  private persist(): void {
-    try {
-      const refs: StoredJobRef[] = this._jobs().map((job) => ({ jobId: job.jobId, fileName: job.fileName }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(refs));
-    } catch {
-      // Storage full or unavailable (private mode): live updates still work for this session.
-    }
-  }
 }
 
 function isDone(job: Job): boolean {
   return job.stage === 'COMPLETED' || job.stage === 'FAILED';
 }
 
-function readStored(): StoredJobRef[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (entry): entry is StoredJobRef =>
-        typeof entry === 'object' && entry !== null && typeof (entry as StoredJobRef).jobId === 'string',
-    );
-  } catch {
-    return [];
-  }
+/** Maps a backend snapshot to the UI job shape (docs/API.md §8). */
+function toJob(snapshot: JobSnapshot): Job {
+  return {
+    jobId: snapshot.jobId,
+    fileName: snapshot.fileName ?? 'CV',
+    model: snapshot.model ?? undefined,
+    stage: snapshot.stage,
+    message: STAGE_LABELS[snapshot.stage] ?? snapshot.stage,
+    progress: snapshot.progress ?? 0,
+    resultUrl: snapshot.resultUrl ?? undefined,
+    report: snapshot.report ?? null,
+    errorCode: snapshot.errorCode ?? undefined,
+    errorMessage: snapshot.errorMessage ?? undefined,
+    reconnecting: false,
+  };
 }

@@ -3,9 +3,9 @@ import { Job, STAGE_LABELS } from '../../../core/job.model';
 import { JobsStore } from '../../../core/jobs.store';
 
 /**
- * One job card (plan §8.4): small per-job progress indicator, never a
- * full-screen loader. Shows the completion report once the real LLM
- * pipeline (M7+) attaches it; the simulated pipeline only drives stages.
+ * One job card (plan §8.4): small per-job progress indicator, never a full-screen loader.
+ * After COMPLETED it shows the match score, keywords, summary, the change list and the
+ * Download improved CV button; after FAILED an understandable message.
  */
 @Component({
   selector: 'app-job-card',
@@ -19,12 +19,7 @@ import { JobsStore } from '../../../core/jobs.store';
         </div>
         <span
           class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
-          [class.bg-blue-100]="job().stage !== 'COMPLETED' && job().stage !== 'FAILED'"
-          [class.text-blue-800]="job().stage !== 'COMPLETED' && job().stage !== 'FAILED'"
-          [class.bg-green-100]="job().stage === 'COMPLETED'"
-          [class.text-green-800]="job().stage === 'COMPLETED'"
-          [class.bg-red-100]="job().stage === 'FAILED'"
-          [class.text-red-800]="job().stage === 'FAILED'"
+          [class]="badgeClasses()"
         >
           {{ stageLabel() }}
         </span>
@@ -36,19 +31,68 @@ import { JobsStore } from '../../../core/jobs.store';
       </div>
       <p class="mt-1 text-xs text-gray-600">{{ job().message }}</p>
 
-      @if (job().reconnecting && job().stage !== 'COMPLETED' && job().stage !== 'FAILED') {
+      @if (job().reconnecting && !isDone()) {
         <p class="mt-1 text-xs text-amber-600">Reconnecting… live updates will resume automatically.</p>
       }
 
       @if (job().stage === 'COMPLETED') {
-        <div class="mt-2 rounded-md bg-green-50 p-2 text-sm text-green-800">
-          @if (job().report !== null && job().report !== undefined) {
-            <p class="font-medium">Analysis report:</p>
-            <pre class="mt-1 max-h-40 overflow-auto text-xs">{{ reportText() }}</pre>
-          } @else {
-            <p>Done (demo pipeline — match score and changes list arrive with the real LLM steps).</p>
+        @if (job().report; as report) {
+          <div class="mt-2 rounded-md border border-blue-200 bg-blue-50 p-2 text-sm text-blue-800">
+            <p class="text-xs font-medium uppercase">CV Analysis</p>
+            <p class="mt-1">
+              Match score: <span class="font-semibold">{{ report.matchScoreBefore }}%</span>
+            </p>
+            @if (report.summary) {
+              <p class="mt-1 text-xs text-gray-700">{{ report.summary }}</p>
+            }
+            @if (report.matchedKeywords.length > 0) {
+              <p class="mt-1 text-xs text-blue-700">Matched keywords:</p>
+              <ul class="mt-0.5 list-disc pl-4 text-xs text-blue-700">
+                @for (kw of report.matchedKeywords; track kw) {
+                  <li>{{ kw }}</li>
+                }
+              </ul>
+            }
+            @if (report.missingKeywords.length > 0) {
+              <p class="mt-1 text-xs text-orange-700">Missing keywords:</p>
+              <ul class="mt-0.5 list-disc pl-4 text-xs text-orange-700">
+                @for (kw of report.missingKeywords; track kw) {
+                  <li>{{ kw }}</li>
+                }
+              </ul>
+            }
+          </div>
+
+          @if (report.changes.length > 0) {
+            <div class="mt-2">
+              <p class="text-xs font-medium uppercase text-gray-600">Changes applied</p>
+              <ul class="mt-1 flex flex-col gap-1">
+                @for (change of report.changes; track $index) {
+                  <li class="rounded-md border border-gray-200 bg-gray-50 p-2 text-xs">
+                    <p class="font-medium">{{ change.section }}</p>
+                    <p class="mt-0.5 text-gray-500 line-through">{{ change.before }}</p>
+                    <p class="mt-0.5 text-gray-800">{{ change.after }}</p>
+                    <p class="mt-0.5 text-gray-500">{{ change.reason }}</p>
+                  </li>
+                }
+              </ul>
+            </div>
           }
-        </div>
+        } @else {
+          <p class="mt-2 rounded-md bg-green-50 p-2 text-sm text-green-800">
+            Done (demo pipeline — match score and changes list arrive with the real LLM steps).
+          </p>
+        }
+
+        @if (job().resultUrl) {
+          <a
+            [href]="job().resultUrl"
+            download
+            class="mt-2 inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Download improved CV
+          </a>
+        }
       }
 
       @if (job().stage === 'FAILED') {
@@ -61,11 +105,11 @@ import { JobsStore } from '../../../core/jobs.store';
         <button
           type="button"
           class="mt-2 rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50"
-          (click)="retry()"
+          (click)="dismiss()"
         >
-          Dismiss &amp; try again
+          Dismiss
         </button>
-      } @else {
+      } @else if (job().stage !== 'COMPLETED') {
         <button
           type="button"
           class="mt-2 text-xs text-gray-400 hover:text-gray-600 hover:underline"
@@ -85,19 +129,18 @@ export class JobCard {
     return STAGE_LABELS[this.job().stage];
   }
 
-  reportText(): string {
-    try {
-      return JSON.stringify(this.job().report, null, 2);
-    } catch {
-      return String(this.job().report);
-    }
+  isDone(): boolean {
+    return this.job().stage === 'COMPLETED' || this.job().stage === 'FAILED';
+  }
+
+  badgeClasses(): string {
+    const stage = this.job().stage;
+    if (stage === 'COMPLETED') return 'bg-green-100 text-green-800';
+    if (stage === 'FAILED') return 'bg-red-100 text-red-800';
+    return 'bg-blue-100 text-blue-800';
   }
 
   dismiss(): void {
-    this.store.remove(this.job().jobId);
-  }
-
-  retry(): void {
     this.store.remove(this.job().jobId);
   }
 }

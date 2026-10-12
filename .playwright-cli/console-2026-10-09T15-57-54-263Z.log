@@ -1,0 +1,4 @@
+[     133ms] [LOG] Angular is running in development mode. @ http://localhost:4200/@fs/home/michau/projects/btfa/frontend/.angular/cache/22.2.2/frontend/vite/deps/core-C4Mibiy-.js?v=09520276:13467
+[  663005ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:4200/home/michau/projects/btfa/test%20data/Michal_Lachowicz_CV.pdf:0
+[  663007ms] [ERROR] ERROR TypeError: Failed to set the 'files' property on 'HTMLInputElement': Failed to convert value to 'FileList'.
+    at req.onload (eval at <anonymous> (eval at evaluate (:368:30)), <anonymous>:1:293) @ http://localhost:4200/@vite/client:298

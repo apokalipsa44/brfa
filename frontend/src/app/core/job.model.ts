@@ -8,16 +8,43 @@ export type Stage =
   | 'COMPLETED'
   | 'FAILED';
 
+/** One change the rewrite step applied to a CV section (docs/API.md report shape). */
+export interface CvChange {
+  section: string;
+  before: string;
+  after: string;
+  reason: string;
+}
+
+export interface Suggestion {
+  section: string;
+  problem: string;
+  recommendation: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+/** Completion report attached to the `completed` event and the snapshot endpoint. */
+export interface JobReport {
+  matchScoreBefore: number;
+  matchedKeywords: string[];
+  missingKeywords: string[];
+  suggestions: Suggestion[];
+  summary: string;
+  changes: CvChange[];
+}
+
 /** One CV job as tracked in the UI. Updated live from SSE events (plan §8.5). */
 export interface Job {
   jobId: string;
   fileName: string;
+  /** Model selected for this job (may be empty when the backend default was used). */
+  model?: string;
   stage: Stage;
   message: string;
   progress: number;
   resultUrl?: string;
-  /** Completion report (match score + changes); null while the simulated pipeline runs. */
-  report?: unknown;
+  /** Completion report; null while the pipeline runs or the simulated pipeline is active. */
+  report?: JobReport | null;
   errorCode?: string;
   errorMessage?: string;
   /** True while the EventSource is reconnecting (backend replays missed events). */
