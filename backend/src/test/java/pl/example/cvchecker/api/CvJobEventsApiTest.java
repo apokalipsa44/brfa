@@ -8,7 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,21 +24,42 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+
+import pl.example.cvchecker.pdf.TestPdfs;
 
 /**
  * End-to-end SSE tests against the simulated pipeline (milestone 4 acceptance): a client sees
  * successive stages, replay after a delayed connection works, and heartbeats arrive.
  */
 @SpringBootTest(properties = {
+        "cvchecker.pipeline.mode=simulated",
         "cvchecker.pipeline.stage-delay=200ms",
         "cvchecker.sse.heartbeat-interval=50ms"
 })
 @AutoConfigureMockMvc
 class CvJobEventsApiTest {
 
-    private static final byte[] PDF_BYTES = ("%PDF-1.4\n%fake-cv-for-testing\n").getBytes(StandardCharsets.UTF_8);
+    private static final byte[] PDF_BYTES = TestPdfs.pdf("Jan Kowalski", "Senior Java Developer");
+
+    /** Isolated job store so persisted history never leaks between test runs. */
+    private static final Path JOB_STORE = newTempStore();
+
+    @DynamicPropertySource
+    static void jobStore(DynamicPropertyRegistry registry) {
+        registry.add("cvchecker.jobs.store-path", () -> JOB_STORE.toString());
+    }
+
+    private static Path newTempStore() {
+        try {
+            return Files.createTempDirectory("cvchecker-events-").resolve("cv-jobs.json");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
     @Autowired
     MockMvc mvc;
@@ -95,8 +120,14 @@ class CvJobEventsApiTest {
     }
 
     private String createJob() throws Exception {
+        MvcResult upload = mvc.perform(multipart("/api/cv")
+                        .file(new MockMultipartFile("file", "cv.pdf", MediaType.APPLICATION_PDF_VALUE, PDF_BYTES)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String cvId = JsonPath.parse(upload.getResponse().getContentAsString()).read("$.id");
+
         MvcResult result = mvc.perform(multipart("/api/cv-jobs")
-                        .file(new MockMultipartFile("file", "cv.pdf", MediaType.APPLICATION_PDF_VALUE, PDF_BYTES))
+                        .param("cvId", cvId)
                         .param("jobDescription", "Senior Java developer wanted"))
                 .andExpect(status().isAccepted())
                 .andReturn();

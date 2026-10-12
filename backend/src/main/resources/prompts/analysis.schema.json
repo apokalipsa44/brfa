@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "properties": {
+    "matchScore": { "type": "integer" },
+    "matchedKeywords": { "type": "array", "items": { "type": "string" } },
+    "missingKeywords": { "type": "array", "items": { "type": "string" } },
+    "suggestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "section": { "type": "string" },
+          "problem": { "type": "string" },
+          "recommendation": { "type": "string" },
+          "priority": { "enum": ["HIGH", "MEDIUM", "LOW"] }
+        },
+        "required": ["section", "problem", "recommendation", "priority"],
+        "additionalProperties": false
+      }
+    },
+    "summary": { "type": "string" }
+  },
+  "required": ["matchScore", "matchedKeywords", "missingKeywords", "suggestions", "summary"],
+  "additionalProperties": false
+}

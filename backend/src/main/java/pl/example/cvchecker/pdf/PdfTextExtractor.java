@@ -22,12 +22,21 @@ public class PdfTextExtractor {
      * @throws PdfUnreadableException when the file is encrypted or corrupted
      */
     public String extract(Path pdf) {
-        final byte[] data;
         try {
-            data = Files.readAllBytes(pdf);
+            return extract(Files.readAllBytes(pdf));
         } catch (IOException e) {
             throw new PdfUnreadableException("Could not read the uploaded PDF.", e);
         }
+    }
+
+    /**
+     * Extracts text from raw PDF bytes — used at upload time so a scan is rejected before it ever
+     * becomes the active CV (docs/API.md §2).
+     *
+     * @throws PdfNoTextException when nothing extractable is found (scan)
+     * @throws PdfUnreadableException when the file is encrypted or corrupted
+     */
+    public String extract(byte[] data) {
         try (PDDocument document = Loader.loadPDF(data)) {
             String text = new PDFTextStripper().getText(document);
             if (text == null || text.isBlank()) {

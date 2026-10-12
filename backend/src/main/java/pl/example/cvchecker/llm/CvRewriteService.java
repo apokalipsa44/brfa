@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -26,22 +28,36 @@ public class CvRewriteService {
 
     private static final int MAX_CV_CHARS = 15_000;
 
+    /** Rewrite/analysis JSON plus corrective retries must not hit LM Studio's default output cap. */
+    private static final int MAX_OUTPUT_TOKENS = 8192;
+
     private final ChatClient chat;
     private final ObjectMapper mapper;
     private final String basePrompt;
+    private final String jsonSchema;
 
     public CvRewriteService(ChatClient.Builder builder, ObjectMapper mapper,
-            @Value("classpath:/prompts/rewrite.st") Resource rewritePrompt) {
+            @Value("classpath:/prompts/rewrite.st") Resource rewritePrompt,
+            @Value("classpath:/prompts/rewrite.schema.json") Resource rewriteSchema) {
         this.chat = builder.build();
         this.mapper = mapper;
         try {
             this.basePrompt = new String(rewritePrompt.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            this.jsonSchema = new String(rewriteSchema.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new IllegalStateException("Cannot load rewrite.st prompt template.", e);
+            throw new IllegalStateException("Cannot load rewrite.st / rewrite.schema.json.", e);
         }
     }
 
     public CvRewriteResult rewrite(String cvText, String jobDescription, CvAnalysis analysis) {
+        return rewrite(cvText, jobDescription, analysis, null);
+    }
+
+    /**
+     * @param model optional per-job model override (frontend dropdown). When blank, the model from
+     *              {@code spring.ai.openai.chat.options.model} (env {@code LLM_MODEL}) is used.
+     */
+    public CvRewriteResult rewrite(String cvText, String jobDescription, CvAnalysis analysis, String model) {
         String analysisJson;
         try {
             analysisJson = mapper.writeValueAsString(analysis);
@@ -54,7 +70,13 @@ public class CvRewriteService {
         Exception lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                CvRewriteResult result = chat.prompt().user(prompt).call().entity(CvRewriteResult.class);
+                String userPrompt = retryHint(attempt) + prompt;
+                OpenAiChatOptions.Builder options = jsonSchemaOptions();
+                if (model != null && !model.isBlank()) {
+                    options.model(model);
+                }
+                CvRewriteResult result = chat.prompt().user(userPrompt).options(options).call()
+                        .entity(CvRewriteResult.class);
                 validate(result);
                 return result;
             } catch (LlmInvalidOutputException e) {
@@ -81,6 +103,29 @@ public class CvRewriteService {
         if (document.fullName() == null || document.fullName().isBlank() || !hasContent) {
             throw new LlmInvalidOutputException("Rewrite failed validation (empty name/content).", null);
         }
+    }
+
+    /** Attempts ≥ 2 get a corrective hint (plan §6.7): the model must re-emit truly minimal JSON. */
+    private static String retryHint(int attempt) {
+        return attempt >= 2
+                ? "Your previous response was rejected: it was not a single valid JSON object. "
+                + "Respond again with ONLY the JSON object described above. No prose, no markdown, no code fences.\n\n"
+                : "";
+    }
+
+    /**
+     * LM Studio enforces the schema at generation time (docs/ENVIRONMENT.md), so the response cannot be
+     * structurally invalid; validation + retry remain as the safety net (plan §6.7).
+     */
+    private OpenAiChatOptions.Builder jsonSchemaOptions() {
+        return OpenAiChatOptions.builder()
+                .temperature(0.2)
+                .maxTokens(MAX_OUTPUT_TOKENS)
+                .responseFormat(OpenAiChatModel.ResponseFormat.builder()
+                        .type(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA)
+                        .jsonSchema(jsonSchema)
+                        .strict(true)
+                        .build());
     }
 
     private static String truncate(String text) {

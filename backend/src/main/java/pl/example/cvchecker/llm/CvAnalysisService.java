@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -26,26 +28,46 @@ public class CvAnalysisService {
     /** Long inputs blow the local model's context window, so the CV side is truncated (plan §6.3.4). */
     private static final int MAX_CV_CHARS = 15_000;
 
+    /** Rewrite/analysis JSON plus corrective retries must not hit LM Studio's default output cap. */
+    private static final int MAX_OUTPUT_TOKENS = 8192;
+
     private final ChatClient chat;
     private final String basePrompt;
+    private final String jsonSchema;
 
     public CvAnalysisService(ChatClient.Builder builder,
-            @Value("classpath:/prompts/analyze.st") Resource analyzePrompt) {
+            @Value("classpath:/prompts/analyze.st") Resource analyzePrompt,
+            @Value("classpath:/prompts/analysis.schema.json") Resource analysisSchema) {
         this.chat = builder.build();
         try {
             this.basePrompt = new String(analyzePrompt.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            this.jsonSchema = new String(analysisSchema.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new IllegalStateException("Cannot load analyze.st prompt template.", e);
+            throw new IllegalStateException("Cannot load analyze.st / analysis.schema.json.", e);
         }
     }
 
     public CvAnalysis analyze(String cvText, String jobDescription) {
+        return analyze(cvText, jobDescription, null);
+    }
+
+    /**
+     * @param model optional per-job model override (frontend dropdown). When blank, the model from
+     *              {@code spring.ai.openai.chat.options.model} (env {@code LLM_MODEL}) is used.
+     */
+    public CvAnalysis analyze(String cvText, String jobDescription, String model) {
         String prompt = basePrompt
                 + "\n<cv>\n" + truncate(cvText) + "\n</cv>\n<job>\n" + jobDescription + "\n</job>";
         Exception lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                CvAnalysis analysis = chat.prompt().user(prompt).call().entity(CvAnalysis.class);
+                String userPrompt = retryHint(attempt) + prompt;
+                OpenAiChatOptions.Builder options = jsonSchemaOptions();
+                if (model != null && !model.isBlank()) {
+                    options.model(model);
+                }
+                CvAnalysis analysis = chat.prompt().user(userPrompt).options(options).call()
+                        .entity(CvAnalysis.class);
                 validate(analysis);
                 return analysis;
             } catch (LlmInvalidOutputException e) {
@@ -72,6 +94,29 @@ public class CvAnalysisService {
                 || analysis.summary() == null || analysis.summary().isBlank()) {
             throw new LlmInvalidOutputException("Analysis failed validation (score range / empty sections).", null);
         }
+    }
+
+    /** Attempts ≥ 2 get a corrective hint (plan §6.7): the model must re-emit truly minimal JSON. */
+    private static String retryHint(int attempt) {
+        return attempt >= 2
+                ? "Your previous response was rejected: it was not a single valid JSON object. "
+                + "Respond again with ONLY the JSON object described above. No prose, no markdown, no code fences.\n\n"
+                : "";
+    }
+
+    /**
+     * LM Studio enforces the schema at generation time (docs/ENVIRONMENT.md), so the response cannot be
+     * structurally invalid; validation + retry remain as the safety net (plan §6.7).
+     */
+    private OpenAiChatOptions.Builder jsonSchemaOptions() {
+        return OpenAiChatOptions.builder()
+                .temperature(0.2)
+                .maxTokens(MAX_OUTPUT_TOKENS)
+                .responseFormat(OpenAiChatModel.ResponseFormat.builder()
+                        .type(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA)
+                        .jsonSchema(jsonSchema)
+                        .strict(true)
+                        .build());
     }
 
     private static String truncate(String text) {

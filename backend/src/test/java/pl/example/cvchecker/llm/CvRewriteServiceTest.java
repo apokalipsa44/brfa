@@ -6,12 +6,14 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.core.io.ByteArrayResource;
 
 import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -33,9 +35,11 @@ class CvRewriteServiceTest {
         call = mock(ChatClient.CallResponseSpec.class);
         when(chat.prompt()).thenReturn(request);
         when(request.user(anyString())).thenReturn(request);
+        when(request.options(any(OpenAiChatOptions.Builder.class))).thenReturn(request);
         when(request.call()).thenReturn(call);
         service = new CvRewriteService(builder, new ObjectMapper(),
-                new ByteArrayResource("Return JSON.".getBytes(StandardCharsets.UTF_8)));
+                new ByteArrayResource("Return JSON.".getBytes(StandardCharsets.UTF_8)),
+                new ByteArrayResource("{}".getBytes(StandardCharsets.UTF_8)));
     }
 
     @Test

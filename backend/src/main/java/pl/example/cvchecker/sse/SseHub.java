@@ -167,8 +167,8 @@ public class SseHub {
         }
     }
 
-    /** Report attached to the completed event; null while the simulated pipeline runs (M7+ fills it). */
+    /** Report attached to the completed event; populated by the real pipeline (plan §6.7). */
     private Object reportOf(CvJob job) {
-        return job.analysis();
+        return job.report();
     }
 }

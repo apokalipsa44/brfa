@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -34,8 +35,29 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     ProblemDetail handleOther(Exception ex, HttpServletRequest request) {
+        // Spring MVC's own exceptions (unsupported media type, wrong method, malformed body, …) are
+        // ErrorResponse instances and already carry the correct status — respect them instead of 500.
+        if (ex instanceof ErrorResponse er) {
+            int status = er.getStatusCode().value();
+            ProblemDetail body = er.getBody();
+            String title = body.getTitle() != null ? body.getTitle() : "Request rejected";
+            String detail = body.getDetail() != null ? body.getDetail() : "The request could not be processed.";
+            log.warn("Request rejected on {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+            return problem(status, codeFor(status), title, detail, request);
+        }
         log.error("Unhandled error on {} {}", request.getMethod(), request.getRequestURI(), ex);
         return problem(500, "INTERNAL_ERROR", "Internal error", "Something went wrong. Please try again.", request);
+    }
+
+    /** Stable machine code for framework-level rejections (docs/API.md § Errors). */
+    private static String codeFor(int status) {
+        return switch (status) {
+            case 400 -> "BAD_REQUEST";
+            case 404 -> "NOT_FOUND";
+            case 405 -> "METHOD_NOT_ALLOWED";
+            case 415 -> "UNSUPPORTED_MEDIA_TYPE";
+            default -> "REQUEST_REJECTED";
+        };
     }
 
     private ProblemDetail problem(int status, String code, String title, String detail, HttpServletRequest request) {

@@ -1,10 +1,14 @@
 package pl.example.cvchecker.pipeline;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
@@ -12,22 +16,27 @@ import pl.example.cvchecker.job.CvJob;
 import pl.example.cvchecker.job.JobEvent;
 import pl.example.cvchecker.job.Stage;
 import pl.example.cvchecker.sse.SseHub;
+import pl.example.cvchecker.storage.TempFileStorage;
 
 /**
  * Simulated pipeline (milestone 4): walks the stages with fixed delays so event communication can be
- * tested without a local LLM. Replaced by the real PDFBox/LLM steps in milestones 7+.
+ * tested without a local LLM. Active only with {@code cvchecker.pipeline.mode=simulated}; the
+ * default is {@link RealCvProcessingPipeline} (plan §6.7).
  */
 @Component
-public class SimulatedPipeline {
+@ConditionalOnProperty(name = "cvchecker.pipeline.mode", havingValue = "simulated")
+public class SimulatedPipeline implements CvProcessingPipeline {
 
     private static final Logger log = LoggerFactory.getLogger(SimulatedPipeline.class);
 
     private final SseHub hub;
+    private final TempFileStorage storage;
     private final Duration stageDelay;
 
-    public SimulatedPipeline(SseHub hub,
+    public SimulatedPipeline(SseHub hub, TempFileStorage storage,
                              @Value("${cvchecker.pipeline.stage-delay:2s}") Duration stageDelay) {
         this.hub = hub;
+        this.storage = storage;
         this.stageDelay = stageDelay;
     }
 
@@ -64,6 +73,13 @@ public class SimulatedPipeline {
     }
 
     private void complete(CvJob job) {
+        Path result = storage.root().resolve(job.id() + "-result.pdf");
+        try {
+            Files.copy(job.originalFile(), result);
+            job.setResultFile(result);
+        } catch (IOException e) {
+            log.warn("Could not copy result file for job {}: {}", job.id(), e.getMessage());
+        }
         JobEvent event;
         synchronized (job.eventLock) {
             event = job.appendStatus(Stage.COMPLETED, "Improved CV ready", 100);
