@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { JobReport, Stage } from '../job.model';
 
 /** Response of POST /api/cv (docs/API.md §7): the persistent CV reused by every job. */
@@ -29,6 +29,20 @@ export interface JobSnapshot {
   errorCode?: string | null;
   errorMessage?: string | null;
   model?: string | null;
+}
+
+/** One entry of GET /api/llm/models (docs/API.md §6). */
+export interface ModelEntry {
+  id: string;
+  loaded: boolean;
+}
+
+/** Response of GET /api/llm/models (docs/API.md §6): all models LM Studio can serve. */
+export interface ModelsResponse {
+  models: ModelEntry[];
+  activeModelId: string | null;
+  ready: boolean;
+  reason?: string | null;
 }
 
 /** Response of GET /api/llm/models/loaded (docs/API.md §6.1): what is loaded in LM Studio now. */
@@ -76,9 +90,11 @@ export class CvJobsApi {
     return this.http.delete<void>(`/api/cv-jobs/${encodeURIComponent(jobId)}`);
   }
 
-  /** Models currently loaded in LM Studio (GET /api/llm/models). */
+  /** Models LM Studio can serve (GET /api/llm/models) — ids for the picker in the upload form. */
   getAvailableModels(): Observable<string[]> {
-    return this.http.get<string[]>('/api/llm/models');
+    return this.http
+      .get<ModelsResponse>('/api/llm/models')
+      .pipe(map((response) => response.models.map((model) => model.id)));
   }
 
   /** What is loaded in LM Studio right now (docs/API.md §6.1) — drives the status line and Submit. */
