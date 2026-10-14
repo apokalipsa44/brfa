@@ -115,6 +115,11 @@ public class GlobalEventStream {
         publish("models.updated", Map.of());
     }
 
+    @EventListener
+    public void onCvUpdated(CvUpdatedEvent event) {
+        publish("cv.updated", Map.of());
+    }
+
     /** Assigns the next global id, buffers the frame, and fans it out to every open connection. */
     void publish(String name, Object data) {
         String json = serialize(name, data);

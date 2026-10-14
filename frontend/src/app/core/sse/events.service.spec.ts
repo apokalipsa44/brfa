@@ -108,6 +108,12 @@ describe('EventsService', () => {
       .flush({ models: [], activeModelId: null, ready: false, reason: null });
   });
 
+  it('refetches the active CV on cv.updated (another tab replaced it)', () => {
+    service.connect();
+    FakeEventSource.last?.dispatch('cv.updated', {});
+    http.expectOne('/api/cv').flush({ id: 'cv-2', fileName: 'new.pdf', status: 'READY' });
+  });
+
   it('stays quiet for the heartbeat ping', () => {
     service.connect();
     FakeEventSource.last?.dispatch('ping', {});

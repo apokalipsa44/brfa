@@ -49,6 +49,11 @@ export class CvContextStore {
     this.refreshModels();
   }
 
+  /** Re-reads only the active CV; safe to call on every `cv.updated` event from another tab. */
+  reloadCv(): void {
+    this.loadCv();
+  }
+
   /** Uploads or replaces the active CV; failures are surfaced through {@link #cvError}. */
   upload(file: File): void {
     const invalid = validateCvFile(file);

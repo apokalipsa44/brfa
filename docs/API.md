@@ -357,6 +357,7 @@ browser's per-domain connection limit (≈6 on HTTP/1.1) that previously froze j
 | `analysis.updated` | any stage/progress/title/score change for an analysis | analysis summary §4 |
 | `analysis.deleted` | an analysis was removed | `{ "analysisId": "…" }` |
 | `models.updated` | the model state changed (selection, load, readiness) | `{}` (client re-fetches `GET /api/llm/models`) |
+| `cv.updated` | the active CV was uploaded or replaced | `{}` (client re-fetches `GET /api/cv`) |
 | `ping` | heartbeat, every ~15-20 s | `{}` |
 
 Example:
@@ -381,6 +382,8 @@ Connection / replay semantics:
   liveness signal, **never** shown to the user.
 - The stream never closes for terminal states: with one global stream, a freshly created analysis
   must be observable on the same open connection. `analysis.deleted` tells tabs to drop a card.
+- Context changes reach every tab too: `models.updated` and `cv.updated` keep the top-bar model
+  select and CV chip in sync when another tab changes them.
 - Disconnects are handled quietly: the client reconnects with `Last-Event-ID` and the backing HTTP
   server / dev proxy must not buffer or time out the stream.
 

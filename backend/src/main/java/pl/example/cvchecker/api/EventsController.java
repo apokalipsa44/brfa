@@ -10,7 +10,8 @@ import pl.example.cvchecker.sse.GlobalEventStream;
 
 /**
  * The single app-wide SSE stream (docs/API.md §7). One connection per open tab receives every
- * {@code analysis.updated} / {@code analysis.deleted} / {@code models.updated} / {@code ping} event.
+ * {@code analysis.updated} / {@code analysis.deleted} / {@code models.updated} / {@code cv.updated} /
+ * {@code ping} event.
  */
 @RestController
 public class EventsController {

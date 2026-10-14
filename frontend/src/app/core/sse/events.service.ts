@@ -58,6 +58,9 @@ export class EventsService {
     // A `models.updated` event carries no state, so the client re-fetches the model context.
     source.addEventListener('models.updated', () => this.cv.refreshModels());
 
+    // A `cv.updated` event carries no state, so the client re-fetches the active CV (another tab replaced it).
+    source.addEventListener('cv.updated', () => this.cv.reloadCv());
+
     // Heartbeat: a liveness signal only, never shown to the user.
     source.addEventListener('ping', () => {
       this._disconnected.set(false);

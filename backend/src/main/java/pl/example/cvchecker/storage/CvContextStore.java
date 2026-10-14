@@ -7,21 +7,27 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
+
+import pl.example.cvchecker.sse.CvUpdatedEvent;
 
 /**
  * The single active workspace CV (docs/API.md §2): stored once and reused by every analysis.
  * Uploading a new CV replaces the current one; each analysis snapshots the text at creation, so a
- * replacement never affects an existing analysis.
+ * replacement never affects an existing analysis. Every successful placement broadcasts
+ * {@code cv.updated} so other open tabs refresh the CV chip.
  */
 @Component
 public class CvContextStore {
 
     private final TempFileStorage storage;
+    private final ApplicationEventPublisher events;
     private CvContext current;
 
-    public CvContextStore(TempFileStorage storage) {
+    public CvContextStore(TempFileStorage storage, ApplicationEventPublisher events) {
         this.storage = storage;
+        this.events = events;
     }
 
     /** Stores the uploaded PDF as the current CV and removes the previously stored one. */
@@ -31,6 +37,7 @@ public class CvContextStore {
         CvContext previous = this.current;
         this.current = new CvContext(id, fileName, extractedText, data.length, Instant.now(), path);
         deleteQuietly(previous);
+        events.publishEvent(new CvUpdatedEvent(id));
         return this.current;
     }
 

@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -130,6 +132,22 @@ class EventsApiTest {
         awaitBody(stream, body -> frames(stream).stream().anyMatch(f -> "ping".equals(f.name())));
         Frame ping = frames(stream).stream().filter(f -> "ping".equals(f.name())).findFirst().orElseThrow();
         assertThat(ping.data().trim()).isEqualTo("{}");
+    }
+
+    @Test
+    void uploadingCvIsBroadcastAsCvUpdated() throws Exception {
+        MvcResult stream = openStream(null);
+
+        mvc.perform(multipart("/api/cv")
+                        .file(new MockMultipartFile("file", "cv.pdf", MediaType.APPLICATION_PDF_VALUE,
+                                TestPdfs.pdf("Jan Kowalski", "Java, Spring Boot"))))
+                .andExpect(status().isCreated());
+
+        awaitBody(stream, body -> body.contains("cv.updated"));
+        Frame updated = frames(stream).stream()
+                .filter(f -> "cv.updated".equals(f.name()))
+                .findFirst().orElseThrow();
+        assertThat(updated.data().trim()).isEqualTo("{}");
     }
 
     private void ready() throws Exception {
