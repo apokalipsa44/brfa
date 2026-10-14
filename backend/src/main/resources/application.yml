@@ -35,12 +35,9 @@ cvchecker:
     probe-timeout: 10s   # the 1-token readiness probe must not wait for a slow answering model (docs/API.md §3)
   events:
     replay-buffer: 1000  # bound the single SSE stream's reconnect buffer (docs/API.md §7)
-  jobs:
-    max-concurrent: 1   # a local LLM processes one job at a time (plan §6.7)
-    ttl: 24h            # jobs and temp files older than this are removed by @Scheduled (M11)
-    # Recent jobs are persisted here so the queue survives a restart (docs/API.md §8)
-    store-path: ${CV_JOBS_STORE_PATH:data/cv-jobs.json}
-    history-limit: 20   # only the newest jobs are kept in the store
+  analyses:
+    max-concurrent: 1   # a local LLM processes one analysis at a time (plan §6.7)
+    ttl: 24h            # completed analyses and their result PDFs older than this are removed
   pipeline:
     mode: real          # real = PDFBox + LLM + PDF render; simulated = stage delays only (tests/demos)
     stage-delay: 2s     # simulated-pipeline delay per stage (only used when mode=simulated)

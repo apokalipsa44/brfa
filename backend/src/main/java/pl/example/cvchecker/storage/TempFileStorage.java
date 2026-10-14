@@ -27,7 +27,7 @@ public class TempFileStorage {
         return file;
     }
 
-    /** Stores the persistent CV PDF as {@code <root>/cv-<cvId>.pdf} (docs/API.md §7). */
+    /** Stores the persistent CV PDF as {@code <root>/cv-<cvId>.pdf} (docs/API.md §2). */
     public Path storeCv(String cvId, byte[] data) throws IOException {
         Path file = root.resolve("cv-" + cvId + ".pdf");
         Files.write(file, data);

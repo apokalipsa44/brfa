@@ -16,15 +16,13 @@ import pl.example.cvchecker.llm.ModelState;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Model context endpoints (docs/API.md §3). The LM Studio calls live behind {@link ModelContextService},
- * so only the boundary contract — shape of GET /api/llm/models, PUT validation, the deprecated load
- * blank-check — is exercised offline here.
+ * so only the boundary contract — shape of GET /api/llm/models, PUT validation — is exercised offline here.
  */
 @WebMvcTest(ModelController.class)
 class ModelControllerTest {
@@ -95,13 +93,11 @@ class ModelControllerTest {
         verify(models).select("qwen/iq3_s.gguf");
     }
 
-    /** The deprecated flow's blank-check is kept: the old frontend posts to the old path (docs/API.md §7). */
+    /** A missing body is rejected before any LM Studio call (docs/API.md §3). */
     @Test
-    void deprecatedLoadModelBlankReturns400() throws Exception {
-        mvc.perform(post("/api/llm/models/load")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"model\":\"  \"}"))
+    void missingBodyReturns400() throws Exception {
+        mvc.perform(put("/api/llm/active-model").contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("MODEL_BLANK"));
+                .andExpect(jsonPath("$.code").exists());
     }
 }

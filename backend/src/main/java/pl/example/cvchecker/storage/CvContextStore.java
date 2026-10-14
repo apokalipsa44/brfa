@@ -10,9 +10,9 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
- * The single active workspace CV (docs/API.md §2): stored once and reused by every analysis/old job.
- * Uploading a new CV replaces the current one; jobs copy the bytes at creation, so a replacement
- * never affects a queued/running job.
+ * The single active workspace CV (docs/API.md §2): stored once and reused by every analysis.
+ * Uploading a new CV replaces the current one; each analysis snapshots the text at creation, so a
+ * replacement never affects an existing analysis.
  */
 @Component
 public class CvContextStore {

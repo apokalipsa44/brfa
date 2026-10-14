@@ -11,8 +11,10 @@ The app is a small **workspace**, not a form + job stack:
 - Each **analysis** is one posting processed against that context. It runs as an async, **two-stage**
   pipeline: evaluation pauses for the user's approval, then the rewrite produces the new PDF.
 
-`docs/API.md` is the contract; the backend and frontend are implemented against it. Old
-`/api/cv-jobs*` endpoints are deprecated and removed with the final iteration (see §7).
+`docs/API.md` is the contract; the backend and frontend are implemented against it. The old
+`/api/cv-jobs*` endpoints and the per-job SSE streams were removed once the redesign shipped —
+the deprecated model endpoints (`POST /api/llm/models/load`, `GET /api/llm/models/loaded`) as well.
+Only the workspace API below exists.
 
 ---
 
@@ -237,7 +239,7 @@ Returns immediately; processing runs asynchronously.
 Body:
 
 ```json
-{ "title": "Latest job — Acme" }
+{ "title": "Latest posting — Acme" }
 ```
 
 - **200**: the updated summary. Marks the title as user-edited (never auto-overwritten).
@@ -390,8 +392,11 @@ Connection / replay semantics:
 - Analyses live in an **in-memory registry**; the registry is empty after a backend restart.
   Persistence is deliberately out of scope for this iteration (it would sit behind the registry
   interface).
-- Temp files: the current CV file, per-analysis original copies and result PDFs live in the temp
-  dir; TTL cleanup removes analyses/files older than 24 h. Original file bytes are never logged.
+- Temp files: the current CV file and result PDFs live in the temp dir; TTL cleanup
+  (`cvchecker.analyses.ttl`, default 24 h) removes terminal analyses and their files. Original file
+  bytes are never logged.
+- Analyses are processed one at a time on the bounded executor (`cvchecker.analyses.max-concurrent`,
+  default 1) — a local LLM handles one request at a time.
 - LLM calls: HTTP/1.1, read timeout 10 min, temperature 0.2, max output 8192 tokens, strict JSON
   schema (LM Studio `response_format`) with validation + up to 2 corrective retries.
 - SSE replay buffer bound: `cvchecker.events.replay-buffer` (default 1000 events).

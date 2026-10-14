@@ -21,8 +21,8 @@ import pl.example.cvchecker.storage.CvContextStore;
 
 /**
  * The single active workspace CV (docs/API.md §2): uploaded once, text extracted immediately, and
- * reused as the context for every analysis and the old job flow. Replacing it (upload again) only
- * affects future analyses — each analysis snapshots its own copy of the text at creation.
+ * reused as the context for every analysis. Replacing it (upload again) only affects future analyses
+ * — each analysis snapshots its own copy of the text at creation.
  */
 @RestController
 @RequestMapping("/api/cv")
