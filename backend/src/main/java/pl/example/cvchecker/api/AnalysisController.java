@@ -5,6 +5,11 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -121,8 +126,9 @@ public class AnalysisController {
         Evaluation evaluation = analysis.evaluation();
         boolean resultAvailable = analysis.stage() == AnalysisStage.COMPLETED
                 && analysis.resultFile() != null && Files.exists(analysis.resultFile());
-        return new AnalysisDetail(id, analysis.title(), analysis.stage(), analysis.score(), analysis.progress(),
-                analysis.attemptId(), analysis.interruptedStage(), analysis.stageMessage(),
+        return new AnalysisDetail(id, analysis.title(), analysis.stage(), analysis.score(),
+                analysis.shortDescription(), analysis.progress(),
+                analysis.attemptId(), analysis.interruptedStage(), analysis.stageMessage(), analysis.appliedAt(),
                 analysis.createdAt(), analysis.updatedAt(), analysis.modelId(), analysis.errorCode(),
                 analysis.errorMessage(),
                 analysis.sourceUrl(), analysis.postingText(), analysis.postingSource(), analysis.postingTruncated(),
@@ -134,16 +140,58 @@ public class AnalysisController {
                 resultAvailable ? "/api/analyses/" + id + "/result" : null);
     }
 
-    /** Renames the analysis; the user title is never auto-overwritten (§6.2). */
+    /**
+     * Partial update (docs/API.md §4): the user title and the "applied to job" marker. Every field is
+     * optional but at least one must be present. User values are never auto-overwritten (§6.2), and
+     * the change broadcasts an {@code analysis.updated} event so other tabs update live.
+     */
     @PatchMapping("/{id}")
-    public AnalysisSummary rename(@PathVariable String id, @RequestBody(required = false) RenameAnalysisRequest body) {
-        if (body == null || body.title() == null || body.title().isBlank()) {
+    public AnalysisSummary update(@PathVariable String id, @RequestBody(required = false) UpdateAnalysisRequest body) {
+        boolean hasTitle = body != null && body.title() != null;
+        boolean hasApplied = body != null && body.applied() != null;
+        boolean hasAppliedAt = body != null && body.appliedAt() != null;
+        if (!hasTitle && !hasApplied && !hasAppliedAt) {
+            throw new ApiException(422, "NO_UPDATES", "No updates",
+                    "Provide at least one of 'title', 'applied' or 'appliedAt'.");
+        }
+        if (hasTitle && body.title().isBlank()) {
             throw new ApiException(400, "TITLE_BLANK", "Title blank",
                     "Provide a non-blank title for the analysis.");
         }
         Analysis analysis = require(id);
-        analysis.rename(body.title());
+        LocalDate appliedDate = hasAppliedAt ? parseAppliedAt(body.appliedAt()) : null;
+        if (appliedDate != null && appliedDate.isAfter(LocalDate.now())) {
+            throw new ApiException(422, "APPLIED_AT_FUTURE", "Applied date in the future",
+                    "The applied date cannot be in the future.");
+        }
+        if (hasTitle) analysis.rename(body.title());
+        if (hasAppliedAt) {
+            analysis.setApplied(appliedDate); // appliedAt wins over applied and implies applied
+        } else if (hasApplied) {
+            if (body.applied()) analysis.markApplied();
+            else analysis.clearApplied();
+        }
         return analysis.summary();
+    }
+
+    /** Accepts an ISO local date or an ISO date-time, reduced to the local date (docs/API.md §4). */
+    private static LocalDate parseAppliedAt(String value) {
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException ignored) {
+            // fall through to date-time formats
+        }
+        try {
+            return OffsetDateTime.parse(value).atZoneSameInstant(ZoneId.systemDefault()).toLocalDate();
+        } catch (DateTimeParseException ignored) {
+            // fall through to a local date-time
+        }
+        try {
+            return LocalDateTime.parse(value).toLocalDate();
+        } catch (DateTimeParseException e) {
+            throw new ApiException(422, "APPLIED_AT_INVALID", "Invalid applied date",
+                    "Provide an ISO date (yyyy-MM-dd) or date-time.");
+        }
     }
 
     /** Approves suggestions and starts stage 2 (docs/API.md §4); unknown ids are ignored. */

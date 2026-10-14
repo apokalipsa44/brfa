@@ -1,5 +1,6 @@
 package pl.example.cvchecker.api;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import com.jayway.jsonpath.JsonPath;
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -90,6 +92,32 @@ class AnalysisCancelApiTest {
                 .andExpect(jsonPath("$.interruptedStage").doesNotExist());
 
         awaitStage(id, AnalysisStage.AWAITING_REVIEW);
+    }
+
+    /** Retrying keeps user-set values: the applied date and the user title (docs/API.md §4). */
+    @Test
+    void retryKeepsTheAppliedDateAndUserTitle() throws Exception {
+        makeModelReady();
+        cvStore.place("cv.pdf", TestPdfs.pdf("Jan Kowalski", "Java, Spring Boot"), "Jan Kowalski, Java");
+
+        String id = createAnalysis();
+        awaitStage(id, AnalysisStage.EVALUATING);
+        mvc.perform(post("/api/analyses/" + id + "/cancel")).andExpect(status().isOk());
+
+        mvc.perform(patch("/api/analyses/" + id).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Interview at Globex\",\"applied\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedAt").value(LocalDate.now().toString()));
+
+        mvc.perform(post("/api/analyses/" + id + "/retry"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.title").value("Interview at Globex"))
+                .andExpect(jsonPath("$.appliedAt").value(LocalDate.now().toString()));
+
+        awaitStage(id, AnalysisStage.AWAITING_REVIEW);
+        mvc.perform(get("/api/analyses/" + id))
+                .andExpect(jsonPath("$.title").value("Interview at Globex"))
+                .andExpect(jsonPath("$.appliedAt").value(LocalDate.now().toString()));
     }
 
     @Test

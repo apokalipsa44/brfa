@@ -1,5 +1,6 @@
 package pl.example.cvchecker.api;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import com.jayway.jsonpath.JsonPath;
@@ -10,10 +11,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import pl.example.cvchecker.analysis.AnalysisStage;
+import pl.example.cvchecker.analysis.AnalysisUpdatedEvent;
 import pl.example.cvchecker.llm.LmStudioClient;
 import pl.example.cvchecker.llm.LmStudioModelList;
 import pl.example.cvchecker.llm.ModelInfo;
@@ -25,6 +29,7 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -40,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "cvchecker.pipeline.stage-delay=100ms"
 })
 @AutoConfigureMockMvc
+@RecordApplicationEvents
 class AnalysisApiTest {
 
     @Autowired
@@ -47,6 +53,9 @@ class AnalysisApiTest {
 
     @Autowired
     CvContextStore cvStore;
+
+    @Autowired
+    ApplicationEvents events;
 
     @MockitoBean
     LmStudioClient lmClient;
@@ -84,6 +93,31 @@ class AnalysisApiTest {
         mvc.perform(get("/api/analyses/" + id))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ANALYSIS_NOT_FOUND"));
+    }
+
+    /** PATCH persists title/appliedAt and broadcasts an analysis.updated event (docs/API.md §4). */
+    @Test
+    void patchUpdatesAndEmitsAnUpdateEvent() throws Exception {
+        makeModelReady();
+        cvStore.place("cv.pdf", TestPdfs.pdf("Jan Kowalski", "Java, Spring Boot"), "Jan Kowalski, Java");
+        String id = createAnalysis();
+        awaitStage(id, AnalysisStage.AWAITING_REVIEW);
+        events.clear();
+
+        mvc.perform(patch("/api/analyses/" + id).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Applied role\",\"applied\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Applied role"))
+                .andExpect(jsonPath("$.appliedAt").value(LocalDate.now().toString()));
+
+        boolean emitted = events.stream(AnalysisUpdatedEvent.class)
+                .map(AnalysisUpdatedEvent::summary)
+                .anyMatch(s -> id.equals(s.id()) && s.appliedAt() != null);
+        assertThat(emitted).isTrue();
+
+        mvc.perform(get("/api/analyses/" + id))
+                .andExpect(jsonPath("$.title").value("Applied role"))
+                .andExpect(jsonPath("$.appliedAt").value(LocalDate.now().toString()));
     }
 
     private void makeModelReady() {

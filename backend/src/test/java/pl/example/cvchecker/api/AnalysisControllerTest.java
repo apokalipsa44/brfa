@@ -3,6 +3,7 @@ package pl.example.cvchecker.api;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,6 +27,7 @@ import pl.example.cvchecker.pdf.TestPdfs;
 import pl.example.cvchecker.storage.CvContext;
 import pl.example.cvchecker.storage.CvContextStore;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -71,7 +73,7 @@ class AnalysisControllerTest {
         return new Evaluation("Acme", "Senior Java Developer", 58, List.of("Java"), List.of("Kubernetes"),
                 List.of(new Suggestion("Skills", "Missing K8s", "Group container skills", "Docker",
                         "Docker, Kubernetes (basics)", Priority.HIGH)),
-                "Solid match.");
+                "Solid match.", "Payment APIs in Java on a small team.");
     }
 
     /** An analysis stopped at the review gate, with one suggestion (id s1) and score 58. */
@@ -182,6 +184,8 @@ class AnalysisControllerTest {
                 .andExpect(jsonPath("$.title").value("Acme · Senior Java Developer"))
                 .andExpect(jsonPath("$.stage").value("AWAITING_REVIEW"))
                 .andExpect(jsonPath("$.score").value(58))
+                .andExpect(jsonPath("$.shortDescription").value("Payment APIs in Java on a small team."))
+                .andExpect(jsonPath("$.appliedAt").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.modelId").value("qwen/iq3_s.gguf"))
                 .andExpect(jsonPath("$.suggestions[0].id").value("s1"))
                 .andExpect(jsonPath("$.suggestions[0].priority").value("HIGH"))
@@ -219,6 +223,126 @@ class AnalysisControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("Latest job — Acme"))
                 .andExpect(jsonPath("$.stage").value("AWAITING_REVIEW"));
+    }
+
+    @Test
+    void emptyPatchBodyReturns422() throws Exception {
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("NO_UPDATES"));
+    }
+
+    @Test
+    void patchWithNoRecognizedFieldsReturns422() throws Exception {
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"unknown\":\"x\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("NO_UPDATES"));
+    }
+
+    @Test
+    void appliedTrueSetsTodayWhenUnset() throws Exception {
+        Analysis analysis = awaitingReview();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applied\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedAt").value(LocalDate.now().toString()));
+
+        assertThat(analysis.appliedAt()).isEqualTo(LocalDate.now());
+    }
+
+    @Test
+    void appliedTrueKeepsAnExistingDate() throws Exception {
+        Analysis analysis = awaitingReview();
+        analysis.setApplied(LocalDate.now().minusDays(3));
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applied\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedAt").value(LocalDate.now().minusDays(3).toString()));
+    }
+
+    @Test
+    void appliedFalseClearsTheDate() throws Exception {
+        Analysis analysis = awaitingReview();
+        analysis.setApplied(LocalDate.now().minusDays(1));
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applied\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedAt").value(org.hamcrest.Matchers.nullValue()));
+
+        assertThat(analysis.appliedAt()).isNull();
+    }
+
+    @Test
+    void explicitAppliedAtSetsTheDate() throws Exception {
+        Analysis analysis = awaitingReview();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"appliedAt\":\"2026-10-14\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedAt").value("2026-10-14"));
+    }
+
+    @Test
+    void appliedAtAcceptsADateTime() throws Exception {
+        Analysis analysis = awaitingReview();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"appliedAt\":\"2026-10-14T09:30:00Z\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedAt").value("2026-10-14"));
+    }
+
+    @Test
+    void malformedAppliedAtReturns422() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"appliedAt\":\"not-a-date\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("APPLIED_AT_INVALID"));
+    }
+
+    @Test
+    void futureAppliedAtReturns422() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+        String future = LocalDate.now().plusDays(1).toString();
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"appliedAt\":\"" + future + "\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("APPLIED_AT_FUTURE"));
+    }
+
+    @Test
+    void appliedAtWinsOverApplied() throws Exception {
+        Analysis analysis = awaitingReview();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applied\":false,\"appliedAt\":\"2026-10-10\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appliedAt").value("2026-10-10"));
+    }
+
+    @Test
+    void combinedTitleAndAppliedUpdate() throws Exception {
+        Analysis analysis = awaitingReview();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"My title\",\"applied\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("My title"))
+                .andExpect(jsonPath("$.appliedAt").value(LocalDate.now().toString()));
     }
 
     @Test

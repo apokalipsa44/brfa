@@ -22,8 +22,9 @@
         "additionalProperties": false
       }
     },
-    "summary": { "type": "string" }
+    "summary": { "type": "string" },
+    "shortDescription": { "type": "string" }
   },
-  "required": ["employer", "position", "matchScore", "matchedKeywords", "missingKeywords", "suggestions", "summary"],
+  "required": ["employer", "position", "matchScore", "matchedKeywords", "missingKeywords", "suggestions", "summary", "shortDescription"],
   "additionalProperties": false
 }

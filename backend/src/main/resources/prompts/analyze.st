@@ -10,7 +10,12 @@ HARD RULES:
                     "before": <string; the exact current text this edit replaces; empty string when none>,
                     "after": <string; the precise replacement text; empty string when none>,
                     "priority": "HIGH"|"MEDIUM"|"LOW"}],
-   "summary": <string>}
+   "summary": <string>,
+   "shortDescription": <string; one or two plain-text sentences, at most ~160 characters, saying what
+                        the role is about — main technologies, product or domain, team or work mode when
+                        stated. Use only facts from the posting; never invent. Write it in the language
+                        of the posting. No markdown. Do not repeat the employer name if it is already in
+                        the title. Empty string when the posting states nothing usable>}
 - Never invent facts. Score and keywords must follow from what is actually written in the CV.
   Requirements from the posting that the CV lacks go into suggestions/missingKeywords, never into imagined experience.
 - A suggestion must propose how to reword or regroup facts that ARE in the CV — never add a skill,

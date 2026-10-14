@@ -77,21 +77,43 @@ class EvaluationServiceTest {
         assertThatThrownBy(() -> service.validate(evaluation(-1))).isInstanceOf(LlmInvalidOutputException.class);
         assertThatThrownBy(() -> service.validate(evaluation(101))).isInstanceOf(LlmInvalidOutputException.class);
         assertThatThrownBy(() -> service.validate(null)).isInstanceOf(LlmInvalidOutputException.class);
-        assertThatThrownBy(() -> service.validate(new Evaluation("Acme", "Dev", 50, List.of(), List.of(), List.of(), "  ")))
+        assertThatThrownBy(() -> service.validate(new Evaluation("Acme", "Dev", 50, List.of(), List.of(), List.of(), "  ", null)))
                 .isInstanceOf(LlmInvalidOutputException.class);
     }
 
     @Test
     void validationRejectsSuggestionWithoutProposal() {
         Evaluation broken = new Evaluation("Acme", "Dev", 50, List.of("Java"), List.of(),
-                List.of(new Suggestion("Skills", "problem", "  ", "", "", Priority.HIGH)), "match");
+                List.of(new Suggestion("Skills", "problem", "  ", "", "", Priority.HIGH)), "match", null);
         assertThatThrownBy(() -> service.validate(broken)).isInstanceOf(LlmInvalidOutputException.class);
+    }
+
+    @Test
+    void shortDescriptionIsTrimmedAndCappedAtAWordBoundary() {
+        assertThat(EvaluationService.cleanShortDescription("  hello  ")).isEqualTo("hello");
+        assertThat(EvaluationService.cleanShortDescription("   ")).isNull();
+        assertThat(EvaluationService.cleanShortDescription(null)).isNull();
+
+        String long_ = "word ".repeat(80).strip(); // 399 chars
+        String capped = EvaluationService.cleanShortDescription(long_);
+        assertThat(capped).hasSizeLessThanOrEqualTo(200);
+        assertThat(capped).endsWith("…");
+        assertThat(capped).doesNotContain("  ");
+    }
+
+    @Test
+    void evaluateReturnsACleanedShortDescription() {
+        Evaluation dirty = new Evaluation("Acme", "Dev", 60, List.of("Java"), List.of(),
+                List.of(), "ok", "   Backend role in Java.   ");
+        when(call.entity(Evaluation.class)).thenReturn(dirty);
+
+        assertThat(service.evaluate("cv", "job").shortDescription()).isEqualTo("Backend role in Java.");
     }
 
     private static Evaluation evaluation(int score) {
         return new Evaluation("Acme", "Senior Java Developer", score, List.of("Java"), List.of("Kubernetes"),
                 List.of(new Suggestion("Skills", "Missing K8s", "Group existing container skills",
                         "Docker", "Docker, Kubernetes (basics)", Priority.MEDIUM)),
-                "Solid match.");
+                "Solid match.", "A backend role using Java and Kubernetes.");
     }
 }

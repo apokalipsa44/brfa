@@ -119,7 +119,8 @@ public class SimulatedAnalysisPipeline implements AnalysisPipeline {
                 List.of(new Suggestion("Skills", "The posting asks for Kubernetes but the CV mentions Docker only.",
                         "Group the existing container keywords so the skills list covers Kubernetes-related terms already present.",
                         "Docker, CI/CD", "Docker, Kubernetes (basics), CI/CD", Priority.HIGH)),
-                "The CV matches the core stack but lacks container-orchestration keywords.");
+                "The CV matches the core stack but lacks container-orchestration keywords.",
+                "Backend role building payment APIs in Java and Spring Boot on a small platform team.");
     }
 
     private void sleep() throws InterruptedException {

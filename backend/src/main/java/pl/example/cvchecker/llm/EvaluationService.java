@@ -31,6 +31,9 @@ public class EvaluationService {
     /** Rewrite/analysis JSON plus corrective retries must not hit LM Studio's default output cap. */
     private static final int MAX_OUTPUT_TOKENS = 8192;
 
+    /** Hard cap for the evaluation's short description, cut at a word boundary (docs/API.md §6.4). */
+    static final int MAX_SHORT_DESCRIPTION_CHARS = 200;
+
     private final ChatClient chat;
     private final String basePrompt;
     private final String jsonSchema;
@@ -72,7 +75,7 @@ public class EvaluationService {
                 Evaluation evaluation = chat.prompt().user(userPrompt).options(options).call()
                         .entity(Evaluation.class);
                 validate(evaluation);
-                return evaluation;
+                return withCleanDescription(evaluation);
             } catch (LlmInvalidOutputException e) {
                 lastError = e;
                 log.warn("LLM evaluation attempt {}/{} produced invalid output", attempt, MAX_ATTEMPTS);
@@ -108,6 +111,34 @@ public class EvaluationService {
 
     private static boolean blank(String value) {
         return value == null || value.isBlank();
+    }
+
+    /** Returns the evaluation unchanged when its description is already clean, or a capped copy. */
+    static Evaluation withCleanDescription(Evaluation evaluation) {
+        String cleaned = cleanShortDescription(evaluation.shortDescription());
+        if (java.util.Objects.equals(cleaned, evaluation.shortDescription())) {
+            return evaluation;
+        }
+        return new Evaluation(evaluation.employer(), evaluation.position(), evaluation.matchScore(),
+                evaluation.matchedKeywords(), evaluation.missingKeywords(), evaluation.suggestions(),
+                evaluation.summary(), cleaned);
+    }
+
+    /**
+     * Trims the short description and enforces the hard character cap, cutting at a word boundary and
+     * appending an ellipsis (docs/API.md §6.4). A null or blank value becomes null.
+     */
+    static String cleanShortDescription(String value) {
+        if (blank(value)) return null;
+        String trimmed = value.strip();
+        if (trimmed.length() <= MAX_SHORT_DESCRIPTION_CHARS) return trimmed;
+        int limit = MAX_SHORT_DESCRIPTION_CHARS - 1; // room for the ellipsis
+        String cut = trimmed.substring(0, limit);
+        int lastSpace = cut.lastIndexOf(' ');
+        if (lastSpace > 0) {
+            cut = cut.substring(0, lastSpace);
+        }
+        return cut.stripTrailing() + "…";
     }
 
     /** Attempts ≥ 2 get a corrective hint (plan §6.7): the model must re-emit truly minimal JSON. */

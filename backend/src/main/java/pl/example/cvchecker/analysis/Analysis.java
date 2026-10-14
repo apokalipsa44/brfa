@@ -2,6 +2,7 @@ package pl.example.cvchecker.analysis;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -45,6 +46,7 @@ public class Analysis {
     private volatile Instant updatedAt;
     private volatile String title;
     private volatile boolean userEditedTitle;
+    private volatile LocalDate appliedAt;
     private volatile Integer score;
     private volatile Evaluation evaluation;
     private volatile List<AnalysisSuggestion> suggestions = List.of();
@@ -320,9 +322,45 @@ public class Analysis {
         notifyChanged();
     }
 
+    /**
+     * Marks the analysis as applied with today's date, keeping an existing date (PATCH
+     * {@code applied:true}, docs/API.md §4). User-set: pipeline runs never change it.
+     */
+    public void markApplied() {
+        synchronized (eventLock) {
+            if (this.appliedAt == null) this.appliedAt = LocalDate.now();
+            this.updatedAt = Instant.now();
+        }
+        notifyChanged();
+    }
+
+    /** Sets an explicit applied date (PATCH {@code appliedAt}, docs/API.md §4). */
+    public void setApplied(LocalDate date) {
+        synchronized (eventLock) {
+            this.appliedAt = date;
+            this.updatedAt = Instant.now();
+        }
+        notifyChanged();
+    }
+
+    /** Clears the applied marker (PATCH {@code applied:false}, docs/API.md §4). */
+    public void clearApplied() {
+        synchronized (eventLock) {
+            this.appliedAt = null;
+            this.updatedAt = Instant.now();
+        }
+        notifyChanged();
+    }
+
     public AnalysisSummary summary() {
-        return new AnalysisSummary(id, title(), stage, score, progress, attemptId, interruptedStage, stageMessage,
-                createdAt, updatedAt, errorCode, errorMessage);
+        return new AnalysisSummary(id, title(), stage, score, shortDescription(), progress, attemptId,
+                interruptedStage, stageMessage, appliedAt, createdAt, updatedAt, errorCode, errorMessage);
+    }
+
+    /** The evaluation's capped role description, or null before evaluation / when the model gave none. */
+    public String shortDescription() {
+        Evaluation current = evaluation;
+        return current == null ? null : current.shortDescription();
     }
 
     /** Auto-generated "Employer · Position" once evaluation finishes, otherwise the date fallback. */
@@ -412,6 +450,11 @@ public class Analysis {
 
     public String stageMessage() {
         return stageMessage;
+    }
+
+    /** The date the user applied to the job, or null when not applied (docs/API.md §4). */
+    public LocalDate appliedAt() {
+        return appliedAt;
     }
 
     public Instant createdAt() {

@@ -1,7 +1,9 @@
 package pl.example.cvchecker.analysis;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +28,8 @@ class AnalysisTest {
     private static Analysis awaitingReview() {
         Analysis analysis = new Analysis("a1", "cv.pdf", "CV text", "posting", "qwen", Instant.parse("2026-10-12T10:00:00Z"));
         analysis.setEvaluation(new Evaluation("Acme", "Senior Java Developer", 58,
-                List.of("Java"), List.of("Kubernetes"), List.of(suggestion("Skills", Priority.HIGH)), "Fine."));
+                List.of("Java"), List.of("Kubernetes"), List.of(suggestion("Skills", Priority.HIGH)), "Fine.",
+                "A backend role."));
         analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
         return analysis;
     }
@@ -35,7 +38,7 @@ class AnalysisTest {
     void suggestionIdsAreIssuedByTheBackend() {
         Analysis analysis = new Analysis("a1", "cv.pdf", "CV text", "posting", "qwen");
         analysis.setEvaluation(new Evaluation("Acme", "Dev", 50, List.of(), List.of(),
-                List.of(suggestion("Skills", Priority.HIGH), suggestion("Summary", Priority.LOW)), "ok"));
+                List.of(suggestion("Skills", Priority.HIGH), suggestion("Summary", Priority.LOW)), "ok", null));
 
         assertThat(analysis.suggestions()).extracting(AnalysisSuggestion::id).containsExactly("s1", "s2");
     }
@@ -60,7 +63,7 @@ class AnalysisTest {
         analysis.rename("Interview at Globex");
         // A re-evaluation (e.g. after a retry) must not overwrite the user's title.
         analysis.setEvaluation(new Evaluation("Initech", "Full Stack", 80,
-                List.of(), List.of(), List.of(suggestion("Skills", Priority.HIGH)), "ok"));
+                List.of(), List.of(), List.of(suggestion("Skills", Priority.HIGH)), "ok", null));
 
         assertThat(analysis.title()).isEqualTo("Interview at Globex");
     }
@@ -69,7 +72,7 @@ class AnalysisTest {
     void applyReturnsOnlyTheApprovedSuggestions() {
         Analysis analysis = new Analysis("a1", "cv.pdf", "CV text", "posting", "qwen");
         analysis.setEvaluation(new Evaluation("Acme", "Dev", 50, List.of(), List.of(),
-                List.of(suggestion("Skills", Priority.HIGH), suggestion("Summary", Priority.MEDIUM)), "ok"));
+                List.of(suggestion("Skills", Priority.HIGH), suggestion("Summary", Priority.MEDIUM)), "ok", null));
         analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
 
         analysis.beginRewrite(List.of("s2"));
@@ -176,5 +179,62 @@ class AnalysisTest {
 
         assertThat(analysis.attemptSetPosting(previous, "late", PostingSource.JSON_LD, false, null, null)).isFalse();
         assertThat(analysis.postingText()).isNull();
+    }
+
+    @Test
+    void shortDescriptionComesFromTheEvaluation() {
+        assertThat(awaitingReview().shortDescription()).isEqualTo("A backend role.");
+        assertThat(new Analysis("a1", "cv.pdf", "text", "posting", "qwen").shortDescription()).isNull();
+    }
+
+    @Test
+    void markAppliedKeepsAnExistingDate() {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "text", "posting", "qwen");
+        analysis.setApplied(LocalDate.of(2026, 10, 1));
+
+        analysis.markApplied();
+
+        assertThat(analysis.appliedAt()).isEqualTo(LocalDate.of(2026, 10, 1));
+    }
+
+    @Test
+    void clearAppliedRemovesTheDate() {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "text", "posting", "qwen");
+        analysis.setApplied(LocalDate.of(2026, 10, 1));
+
+        analysis.clearApplied();
+
+        assertThat(analysis.appliedAt()).isNull();
+    }
+
+    /** User-set values (title, applied date) survive retry/re-evaluation (docs/API.md §4). */
+    @Test
+    void appliedDateAndUserTitleSurviveRetry() {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "text", "posting", "qwen");
+        analysis.rename("My title");
+        analysis.setApplied(LocalDate.of(2026, 10, 1));
+        analysis.transition(AnalysisStage.EVALUATING, 15);
+        analysis.fail("LLM_INVALID_OUTPUT", "boom", AnalysisStage.EVALUATING);
+
+        analysis.resetForRetry();
+        analysis.setEvaluation(new Evaluation("Acme", "Dev", 70, List.of(), List.of(),
+                List.of(suggestion("Skills", Priority.HIGH)), "ok", "role"));
+        analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
+
+        assertThat(analysis.appliedAt()).isEqualTo(LocalDate.of(2026, 10, 1));
+        assertThat(analysis.title()).isEqualTo("My title");
+    }
+
+    /** Applied changes notify the registry's listener so an analysis.updated event is broadcast. */
+    @Test
+    void appliedChangesNotifyTheListener() {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "text", "posting", "qwen");
+        AtomicInteger changes = new AtomicInteger();
+        analysis.setChangeListener(changes::incrementAndGet);
+
+        analysis.markApplied();
+        analysis.clearApplied();
+
+        assertThat(changes.get()).isEqualTo(2);
     }
 }
