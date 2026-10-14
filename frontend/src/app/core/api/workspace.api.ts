@@ -3,6 +3,13 @@ import { inject, Injectable } from '@angular/core';
 import { catchError, Observable, of, throwError } from 'rxjs';
 import { AnalysisDetail, AnalysisSummary, CvInfo, ModelState } from '../models';
 
+/** The optional fields of a PATCH /api/analyses/{id} (docs/API.md §4); at least one is sent. */
+export interface AnalysisPatch {
+  title?: string;
+  applied?: boolean;
+  appliedAt?: string;
+}
+
 /**
  * Thin HTTP wrapper for the workspace API (docs/API.md). SSE is not handled here — the single global
  * stream lives in `EventsService`. The backend owns the active CV and model, so these calls only
@@ -48,8 +55,9 @@ export class WorkspaceApi {
     return this.http.post<AnalysisSummary>('/api/analyses', { jobPosting });
   }
 
-  renameAnalysis(id: string, title: string): Observable<AnalysisSummary> {
-    return this.http.patch<AnalysisSummary>(`/api/analyses/${encodeURIComponent(id)}`, { title });
+  /** Partial update of the user title and/or the applied marker (docs/API.md §4). */
+  updateAnalysis(id: string, patch: AnalysisPatch): Observable<AnalysisSummary> {
+    return this.http.patch<AnalysisSummary>(`/api/analyses/${encodeURIComponent(id)}`, patch);
   }
 
   applyAnalysis(id: string, approvedSuggestionIds: string[]): Observable<AnalysisSummary> {

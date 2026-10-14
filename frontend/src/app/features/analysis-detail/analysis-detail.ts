@@ -1,9 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 
 import { AnalysesStore, isWorking } from '../../core/analyses.store';
 import { errorMessage } from '../../core/error-messages';
 import { formatDateTime } from '../../core/format';
 import { AnalysisDetail as Detail, AnalysisStage } from '../../core/models';
+import { AppliedToggle } from '../../shared/applied-toggle/applied-toggle';
+import { InlineTitleEdit } from '../../shared/inline-title-edit/inline-title-edit';
 import { KeywordChips } from '../../shared/keyword-chips/keyword-chips';
 import { ProgressInline } from '../../shared/progress-inline/progress-inline';
 import { ScoreBadge } from '../../shared/score-badge/score-badge';
@@ -17,45 +19,54 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
  */
 @Component({
   selector: 'app-analysis-detail',
-  imports: [KeywordChips, ProgressInline, ScoreBadge, StepIndicator, SuggestionList],
+  imports: [AppliedToggle, InlineTitleEdit, KeywordChips, ProgressInline, ScoreBadge, StepIndicator, SuggestionList],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (detail(); as analysis) {
       <div class="mx-auto max-w-3xl">
-        <!-- Header: inline-editable title, status badge, created time. -->
+        <!-- Header: title with a visible rename button, status badge, applied marker, created time. -->
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
             @if (editing()) {
-              <input
-                #titleInput
-                type="text"
-                class="w-full rounded-lg border border-indigo-500 bg-white px-2 py-1 text-xl font-semibold text-slate-900 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
-                [value]="editTitle()"
-                aria-label="Analysis title"
-                (input)="onTitleInput($event)"
-                (keydown.enter)="saveTitle(analysis)"
-                (keydown.escape)="cancelEdit()"
-                (blur)="cancelEdit()"
+              <app-inline-title-edit
+                [value]="analysis.title"
+                size="lg"
+                ariaLabel="Rename analysis"
+                (saved)="saveTitle(analysis, $event)"
+                (cancelled)="cancelEdit()"
               />
             } @else {
-              <button
-                type="button"
-                class="group flex max-w-full items-center gap-2 text-left"
-                (click)="startEdit(analysis)"
-              >
+              <div class="flex min-w-0 items-center gap-2">
                 <h2 class="truncate text-xl font-semibold text-slate-900">{{ analysis.title }}</h2>
-                <span aria-hidden="true" class="text-slate-300 group-hover:text-indigo-600">✎</span>
-              </button>
+                <button
+                  type="button"
+                  class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-indigo-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+                  aria-label="Rename analysis"
+                  title="Rename"
+                  (click)="startEdit(analysis)"
+                >
+                  <span aria-hidden="true">✎</span>
+                </button>
+              </div>
             }
             <p class="mt-1 text-xs text-slate-500">Created {{ formatDateTime(analysis.createdAt) }}</p>
           </div>
 
-          <span
-            class="rounded-full px-2.5 py-1 text-xs font-medium"
-            [class]="statusBadgeClasses(analysis.stage)"
-            aria-live="polite"
-            >{{ stageLabel(analysis.stage) }}</span
-          >
+          <div class="flex flex-col items-end gap-2">
+            <span
+              class="rounded-full px-2.5 py-1 text-xs font-medium"
+              [class]="statusBadgeClasses(analysis.stage)"
+              aria-live="polite"
+              >{{ stageLabel(analysis.stage) }}</span
+            >
+            <app-applied-toggle
+              variant="switch"
+              [applied]="analysis.appliedAt !== null"
+              [appliedAt]="analysis.appliedAt"
+              (toggled)="setApplied(analysis, $event)"
+              (datePicked)="setApplied(analysis, $event)"
+            />
+          </div>
         </div>
 
         <div class="mt-4">
@@ -238,10 +249,9 @@ export class AnalysisDetail {
   });
 
   protected readonly editing = signal(false);
-  protected readonly editTitle = signal('');
   protected readonly selection = signal<ReadonlySet<string>>(new Set());
 
-  private readonly titleInput = viewChild<ElementRef<HTMLInputElement>>('titleInput');
+  private readonly editingId = signal<string | null>(null);
   private readonly lastInitKey = signal('');
 
   readonly selectedIds = computed(() => this.selection());
@@ -259,37 +269,30 @@ export class AnalysisDetail {
         new Set(analysis.suggestions.filter((s) => s.priority !== 'LOW').map((s) => s.id)),
       );
     });
-
-    effect(() => {
-      if (this.editing()) this.titleInput()?.nativeElement.focus();
-    });
-
-    // The sidebar's Rename menu selects an analysis and asks it to open in inline-edit mode.
-    effect(() => {
-      const id = this.analyses.titleEditId();
-      const analysis = this.detail();
-      if (id && analysis && analysis.id === id) {
-        this.startEdit(analysis);
-        this.analyses.consumeTitleEdit(id);
-      }
-    });
   }
 
   startEdit(analysis: Detail): void {
-    this.editTitle.set(analysis.title);
+    if (this.editing()) return;
     this.editing.set(true);
+    // Keep the reference so a stale closure cannot rename a different analysis.
+    this.editingId.set(analysis.id);
   }
 
-  saveTitle(analysis: Detail): void {
-    const title = this.editTitle().trim();
+  saveTitle(analysis: Detail, title: string): void {
     this.editing.set(false);
-    if (title.length > 0 && title !== analysis.title) {
-      this.analyses.rename(analysis.id, title);
-    }
+    if (this.editingId() !== analysis.id) return;
+    this.editingId.set(null);
+    if (title && title !== analysis.title) this.analyses.rename(analysis.id, title);
   }
 
   cancelEdit(): void {
     this.editing.set(false);
+    this.editingId.set(null);
+  }
+
+  /** Requested applied state, or an explicit ISO date when the user picked one. */
+  setApplied(analysis: Detail, applied: boolean | string): void {
+    this.analyses.setApplied(analysis.id, applied);
   }
 
   toggleSuggestion(id: string): void {
@@ -320,10 +323,6 @@ export class AnalysisDetail {
     this.analyses.retry(analysis.id);
   }
 
-  protected onTitleInput(event: Event): void {
-    this.editTitle.set((event.target as HTMLInputElement).value);
-  }
-
   protected readonly stageLabel = (stage: Detail['stage']): string =>
     SHORT_STAGE_LABELS[stage] ?? stage;
 
@@ -347,4 +346,5 @@ const SHORT_STAGE_LABELS: Record<AnalysisStage, string> = {
   GENERATING_PDF: 'Building PDF',
   COMPLETED: 'Ready',
   FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
 };

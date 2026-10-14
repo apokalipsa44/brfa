@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 
 import { AnalysesStore } from './analyses.store';
 import { ToastStore } from './toast.store';
+import { todayIso } from './format';
 import { AnalysisDetail, AnalysisSummary } from './models';
 import { EventsService } from './sse/events.service';
 import { expectCvContext, seedAnalyses } from '../testing/workspace';
@@ -14,6 +15,8 @@ function summary(id: string, overrides: Partial<AnalysisSummary> = {}): Analysis
     title: `Acme · Java ${id}`,
     stage: 'AWAITING_REVIEW',
     score: 58,
+    shortDescription: 'A backend role.',
+    appliedAt: null,
     progress: 40,
     createdAt: '2026-10-12T10:00:00Z',
     updatedAt: '2026-10-12T10:01:00Z',
@@ -116,6 +119,62 @@ describe('AnalysesStore', () => {
     request.flush(summary('a1', { title: 'My custom title' }));
 
     expect(store.analyses()[0].title).toBe('My custom title');
+  });
+
+  it('marks applied optimistically with today and confirms from the PATCH response', () => {
+    seedAnalyses(http, [summary('a1', { appliedAt: null })]);
+
+    store.setApplied('a1', true);
+    expect(store.analyses()[0].appliedAt).toBe(todayIso());
+
+    const request = http.expectOne('/api/analyses/a1');
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ applied: true });
+    request.flush(summary('a1', { appliedAt: todayIso() }));
+
+    expect(store.analyses()[0].appliedAt).toBe(todayIso());
+  });
+
+  it('keeps an existing applied date on true and clears it on false', () => {
+    seedAnalyses(http, [summary('a1', { appliedAt: '2026-10-01' })]);
+
+    store.setApplied('a1', true);
+    expect(store.analyses()[0].appliedAt).toBe('2026-10-01');
+    http.expectOne('/api/analyses/a1').flush(summary('a1', { appliedAt: '2026-10-01' }));
+
+    store.setApplied('a1', false);
+    expect(store.analyses()[0].appliedAt).toBeNull();
+    const request = http.expectOne('/api/analyses/a1');
+    expect(request.request.body).toEqual({ applied: false });
+    request.flush(summary('a1', { appliedAt: null }));
+  });
+
+  it('sets an explicit applied date', () => {
+    seedAnalyses(http, [summary('a1', { appliedAt: null })]);
+
+    store.setApplied('a1', '2026-10-01');
+    const request = http.expectOne('/api/analyses/a1');
+    expect(request.request.body).toEqual({ appliedAt: '2026-10-01' });
+    request.flush(summary('a1', { appliedAt: '2026-10-01' }));
+
+    expect(store.analyses()[0].appliedAt).toBe('2026-10-01');
+  });
+
+  it('rolls back an optimistic change and toasts when the save fails', () => {
+    seedAnalyses(http, [summary('a1', { appliedAt: null })]);
+
+    store.setApplied('a1', true);
+    expect(store.analyses()[0].appliedAt).toBe(todayIso());
+    http
+      .expectOne('/api/analyses/a1')
+      .flush(
+        { code: 'APPLIED_AT_FUTURE', detail: 'future' },
+        { status: 422, statusText: 'Unprocessable Entity' },
+      );
+
+    expect(store.analyses()[0].appliedAt).toBeNull();
+    expect(store.actionError()).toContain('future');
+    expect(toast.message()).toContain('future');
   });
 
   it('drops an analysis deleted by another tab', () => {

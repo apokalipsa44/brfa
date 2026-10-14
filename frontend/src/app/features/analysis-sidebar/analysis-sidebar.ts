@@ -2,13 +2,12 @@ import { ChangeDetectionStrategy, Component, inject, output } from '@angular/cor
 
 import { AnalysesStore } from '../../core/analyses.store';
 import { CvContextStore } from '../../core/cv-context.store';
-import { AnalysisSummary } from '../../core/models';
 import { AnalysisCard } from './analysis-card';
 
 /**
- * Analyses list (docs/API.md §4): the New analysis action plus one compact card per analysis, newest
- * first. Cards update live from the single SSE stream. Rename runs inline in the store's terms; the
- * detail view owns the text field, so a card rename simply triggers the detail edit.
+ * Analyses list (docs/API.md §4): the New analysis action plus one card per analysis, newest first.
+ * Cards update live from the single SSE stream; inline rename and the applied marker write straight
+ * through the store's optimistic actions.
  */
 @Component({
   selector: 'app-analysis-sidebar',
@@ -36,8 +35,9 @@ import { AnalysisCard } from './analysis-card';
               [summary]="analysis"
               [isSelected]="analysis.id === analyses.selectedId()"
               (selected)="onSelect($event)"
-              (renaming)="onRename($event)"
-              (deleted)="onDelete($event)"
+              (renamed)="onRename($event)"
+              (appliedChanged)="onAppliedChanged($event)"
+              (deleted)="analyses.remove($event)"
             />
           }
         </div>
@@ -50,19 +50,16 @@ export class AnalysisSidebar {
   protected readonly cv = inject(CvContextStore);
 
   readonly newAnalysis = output<void>();
-  readonly rename = output<AnalysisSummary>();
-  readonly delete = output<string>();
 
   onSelect(id: string): void {
     this.analyses.select(id);
   }
 
-  onRename(summary: AnalysisSummary): void {
-    this.analyses.select(summary.id);
-    this.rename.emit(summary);
+  onRename(event: { id: string; title: string }): void {
+    this.analyses.rename(event.id, event.title);
   }
 
-  onDelete(id: string): void {
-    this.analyses.remove(id);
+  onAppliedChanged(event: { id: string; applied: boolean }): void {
+    this.analyses.setApplied(event.id, event.applied);
   }
 }

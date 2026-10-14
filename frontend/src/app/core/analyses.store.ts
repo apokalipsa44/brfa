@@ -1,6 +1,7 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { WorkspaceApi } from './api/workspace.api';
+import { AnalysisPatch, WorkspaceApi } from './api/workspace.api';
 import { problemMessage } from './error-messages';
+import { todayIso } from './format';
 import { AnalysisDetail, AnalysisStage, AnalysisSummary } from './models';
 import { ToastStore } from './toast.store';
 
@@ -21,16 +22,12 @@ export class AnalysesStore {
   private readonly _detailLoading = signal(false);
   private readonly _creating = signal(false);
   private readonly _actionError = signal<string | null>(null);
-  private readonly _titleEditId = signal<string | null>(null);
 
   readonly analyses = this._analyses.asReadonly();
   readonly selectedId = this._selectedId.asReadonly();
   readonly detailLoading = this._detailLoading.asReadonly();
   readonly creating = this._creating.asReadonly();
   readonly actionError = this._actionError.asReadonly();
-
-  /** The id of the analysis that should open in inline title-edit mode, if any. */
-  readonly titleEditId = this._titleEditId.asReadonly();
 
   /** The detail of the selected analysis, or null while it is not loaded/selected. */
   readonly selected = computed<AnalysisDetail | null>(() => {
@@ -60,17 +57,6 @@ export class AnalysesStore {
     if (id) this.loadDetail(id);
   }
 
-  /** Opens an analysis with its title ready to edit (the sidebar's Rename menu). */
-  requestTitleEdit(id: string): void {
-    this._titleEditId.set(id);
-    this.select(id);
-  }
-
-  /** Consumes the pending inline-edit request once the detail has reacted to it. */
-  consumeTitleEdit(id: string): void {
-    if (this._titleEditId() === id) this._titleEditId.set(null);
-  }
-
   create(jobPosting: string): void {
     this._actionError.set(null);
     this._creating.set(true);
@@ -87,14 +73,49 @@ export class AnalysesStore {
     });
   }
 
+  /** Renames the analysis; the new title shows immediately and rolls back if the save fails. */
   rename(id: string, title: string): void {
     const trimmed = title.trim();
     if (!trimmed) return;
+    this.patch(id, { title: trimmed }, { title: trimmed });
+  }
+
+  /**
+   * Marks or clears the "applied to job" marker (docs/API.md §4). `true` uses today's date (keeping an
+   * existing one), `false` clears it, and an ISO date string sets an explicit date.
+   */
+  setApplied(id: string, applied: boolean | string): void {
+    if (typeof applied === 'string') {
+      this.patch(id, { appliedAt: applied }, { appliedAt: applied });
+      return;
+    }
+    const current = this.entryFor(id);
+    const appliedAt = applied ? (current?.appliedAt ?? todayIso()) : null;
+    this.patch(id, { applied }, { appliedAt });
+  }
+
+  /** Optimistically applies `fields`, then confirms or rolls back from the PATCH response. */
+  private patch(id: string, body: AnalysisPatch, fields: Partial<AnalysisSummary>): void {
+    const previous: Partial<AnalysisSummary> = {
+      title: this.entryFor(id)?.title,
+      appliedAt: this.entryFor(id)?.appliedAt ?? null,
+    };
     this._actionError.set(null);
-    this.api.renameAnalysis(id, trimmed).subscribe({
+    this.applyLocal(id, fields);
+    this.api.updateAnalysis(id, body).subscribe({
       next: (summary) => this.upsert(summary),
-      error: (err: unknown) => this._actionError.set(problemMessage(err, 'The title could not be saved.')),
+      error: (err: unknown) => {
+        this.applyLocal(id, previous);
+        const message = problemMessage(err, 'The change could not be saved.');
+        this._actionError.set(message);
+        this.toast.show(message);
+      },
     });
+  }
+
+  /** The list entry for `id`, or the loaded detail as a fallback (both carry title + appliedAt). */
+  private entryFor(id: string): AnalysisSummary | AnalysisDetail | undefined {
+    return this._analyses().find((a) => a.id === id) ?? this._details()[id];
   }
 
   apply(id: string, approvedSuggestionIds: string[]): void {
@@ -173,6 +194,18 @@ export class AnalysesStore {
       next.push(summary);
       return next.sort(byNewest);
     });
+    // Keep the open detail (and its header) in step with the summary returned by the backend.
+    this.applyLocal(summary.id, summary);
+  }
+
+  /** Merges `fields` into the list entry and, when loaded, the detail entry for `id`. */
+  private applyLocal(id: string, fields: Partial<AnalysisSummary>): void {
+    this._analyses.update((list) =>
+      list.map((a) => (a.id === id ? { ...a, ...fields } : a)).sort(byNewest),
+    );
+    this._details.update((map) =>
+      map[id] ? { ...map, [id]: { ...map[id], ...fields } } : map,
+    );
   }
 
   private dropLocally(id: string): void {
@@ -201,6 +234,7 @@ export const STAGE_LABELS: Record<AnalysisStage, string> = {
   GENERATING_PDF: 'Building the PDF',
   COMPLETED: 'Ready',
   FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
 };
 
 export function isWorking(stage: AnalysisStage): boolean {

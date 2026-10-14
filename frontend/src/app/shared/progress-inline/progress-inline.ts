@@ -10,6 +10,7 @@ const STAGE_TEXT: Record<AnalysisStage, string> = {
   GENERATING_PDF: 'Building the PDF',
   COMPLETED: 'Done',
   FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
 };
 
 /**

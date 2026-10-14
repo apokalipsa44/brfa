@@ -5,6 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 
 import { AnalysisDetail } from './analysis-detail';
 import { AnalysesStore } from '../../core/analyses.store';
+import { todayIso } from '../../core/format';
 import { CvContextStore } from '../../core/cv-context.store';
 import { EventsService } from '../../core/sse/events.service';
 import { expectCvContext, seedAnalyses } from '../../testing/workspace';
@@ -46,6 +47,8 @@ function detailResponse(overrides: Partial<Detail> = {}): Detail {
     title: 'Acme · Senior Java Developer',
     stage: 'AWAITING_REVIEW',
     score: 58,
+    shortDescription: 'A backend role using Java and Kubernetes.',
+    appliedAt: null,
     progress: 40,
     createdAt: '2026-10-12T10:00:00Z',
     updatedAt: '2026-10-12T10:05:00Z',
@@ -172,6 +175,38 @@ describe('AnalysisDetail review', () => {
 
     expect(fixture.nativeElement.querySelector('input[type="text"]')).toBeNull();
     http.expectNone('/api/analyses/a1');
+  });
+
+  it('toggles the applied marker from the header switch', () => {
+    selectAnalysis();
+
+    const sw = fixture.nativeElement.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(sw).toBeTruthy();
+    expect(sw.getAttribute('aria-checked')).toBe('false');
+
+    sw.click();
+    fixture.detectChanges();
+
+    const request = http.expectOne('/api/analyses/a1');
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ applied: true });
+    request.flush(detailResponse({ appliedAt: todayIso() }));
+    fixture.detectChanges();
+
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('shows a visible rename button that opens the inline editor', () => {
+    selectAnalysis();
+
+    const rename = fixture.nativeElement.querySelector(
+      'button[aria-label="Rename analysis"]',
+    ) as HTMLButtonElement;
+    expect(rename).toBeTruthy();
+
+    rename.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[type="text"]')).toBeTruthy();
   });
 
   it('shows a retry button with friendly text for a failed analysis', () => {

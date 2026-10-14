@@ -12,7 +12,8 @@ export type AnalysisStage =
   | 'REWRITING'
   | 'GENERATING_PDF'
   | 'COMPLETED'
-  | 'FAILED';
+  | 'FAILED'
+  | 'CANCELLED';
 
 export type Priority = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -22,6 +23,10 @@ export interface AnalysisSummary {
   title: string;
   stage: AnalysisStage;
   score: number | null;
+  /** One-or-two-sentence role summary from the evaluation; null until done (docs/API.md §6.4). */
+  shortDescription: string | null;
+  /** ISO local date (yyyy-MM-dd) the user applied to the job; null = not applied (docs/API.md §4). */
+  appliedAt: string | null;
   progress: number;
   createdAt: string;
   updatedAt: string;

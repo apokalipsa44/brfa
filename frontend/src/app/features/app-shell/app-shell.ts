@@ -3,7 +3,6 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { AnalysesStore } from '../../core/analyses.store';
 import { CvContextStore } from '../../core/cv-context.store';
 import { EventsService } from '../../core/sse/events.service';
-import { AnalysisSummary } from '../../core/models';
 import { TopBar } from '../top-bar/top-bar';import { CvDropzone } from '../cv-dropzone/cv-dropzone';
 import { AnalysisSidebar } from '../analysis-sidebar/analysis-sidebar';
 import { NewAnalysisForm } from '../new-analysis-form/new-analysis-form';
@@ -26,14 +25,10 @@ import { Toast } from '../../shared/toast/toast';
       <div class="mx-auto flex w-full max-w-[1280px] flex-1 gap-4 overflow-hidden px-4 py-4">
         <!-- Sidebar: fixed on large screens, drawer on small ones. -->
         <aside
-          class="hidden w-80 shrink-0 flex-col rounded-xl border border-slate-200 bg-white p-3 lg:flex"
+          class="hidden w-[22rem] shrink-0 flex-col rounded-xl border border-slate-200 bg-white p-3 lg:flex"
           aria-label="Analyses"
         >
-          <app-analysis-sidebar
-            (newAnalysis)="showNew()"
-            (rename)="onRename($event)"
-            (delete)="analyses.remove($event)"
-          />
+          <app-analysis-sidebar (newAnalysis)="showNew()" />
         </aside>
 
         <!-- Mobile drawer. -->
@@ -46,14 +41,10 @@ import { Toast } from '../../shared/toast/toast';
               (click)="sidebarOpen.set(false)"
             ></button>
             <aside
-              class="relative m-3 flex max-h-[calc(100dvh-1.5rem)] w-80 max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border border-slate-200 bg-white p-3"
+              class="relative m-3 flex max-h-[calc(100dvh-1.5rem)] w-[22rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border border-slate-200 bg-white p-3"
               aria-label="Analyses"
             >
-              <app-analysis-sidebar
-                (newAnalysis)="onNewFromDrawer()"
-                (rename)="onRename($event)"
-                (delete)="analyses.remove($event)"
-              />
+              <app-analysis-sidebar (newAnalysis)="onNewFromDrawer()" />
             </aside>
           </div>
         }
@@ -104,10 +95,5 @@ export class AppShell {
   protected onNewFromDrawer(): void {
     this.analyses.select(null);
     this.sidebarOpen.set(false);
-  }
-
-  protected onRename(summary: AnalysisSummary): void {
-    this.sidebarOpen.set(false);
-    this.analyses.requestTitleEdit(summary.id);
   }
 }
