@@ -28,7 +28,7 @@ type StepState = 'done' | 'current' | 'upcoming' | 'failed';
               [class.bg-red-50]="step.state === 'failed'"
               [class.text-red-700]="step.state === 'failed'"
               [class.border-slate-200]="step.state === 'upcoming'"
-              [class.text-slate-400]="step.state === 'upcoming'"
+              [class.text-slate-500]="step.state === 'upcoming'"
               [attr.aria-current]="step.state === 'current' ? 'step' : null"
             >
               @if (step.state === 'done') {
@@ -42,7 +42,7 @@ type StepState = 'done' | 'current' | 'upcoming' | 'failed';
               [class.text-indigo-700]="step.state === 'current'"
               [class.text-emerald-700]="step.state === 'done'"
               [class.text-red-700]="step.state === 'failed'"
-              [class.text-slate-400]="step.state === 'upcoming'"
+              [class.text-slate-500]="step.state === 'upcoming'"
             >
               {{ step.label }}
             </span>

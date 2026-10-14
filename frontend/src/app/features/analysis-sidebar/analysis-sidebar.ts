@@ -30,7 +30,7 @@ import { AnalysisCard } from './analysis-card';
           No analyses yet. Paste a posting to check your CV.
         </p>
       } @else {
-        <ul class="flex min-h-0 flex-col gap-1.5 overflow-y-auto pe-0.5">
+        <div role="list" class="flex min-h-0 flex-col gap-1.5 overflow-y-auto pe-0.5">
           @for (analysis of analyses.analyses(); track analysis.id) {
             <app-analysis-card
               [summary]="analysis"
@@ -40,7 +40,7 @@ import { AnalysisCard } from './analysis-card';
               (deleted)="onDelete($event)"
             />
           }
-        </ul>
+        </div>
       }
     </div>
   `,

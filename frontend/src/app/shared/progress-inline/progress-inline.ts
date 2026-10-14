@@ -23,7 +23,7 @@ const STAGE_TEXT: Record<AnalysisStage, string> = {
     <div class="rounded-xl border border-slate-200 bg-white p-4" aria-live="polite" role="status">
       <div class="flex items-center justify-between gap-3">
         <p class="text-sm text-slate-700">{{ text() }}</p>
-        <span class="text-xs text-slate-400 tabular-nums">{{ progress() }}%</span>
+        <span class="text-xs text-slate-500 tabular-nums">{{ progress() }}%</span>
       </div>
       <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
         <div

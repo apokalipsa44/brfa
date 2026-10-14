@@ -47,7 +47,7 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
                 <span aria-hidden="true" class="text-slate-300 group-hover:text-indigo-600">✎</span>
               </button>
             }
-            <p class="mt-1 text-xs text-slate-400">Created {{ formatDateTime(analysis.createdAt) }}</p>
+            <p class="mt-1 text-xs text-slate-500">Created {{ formatDateTime(analysis.createdAt) }}</p>
           </div>
 
           <span
@@ -167,7 +167,7 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
                   <li class="rounded-xl border border-slate-200 bg-white p-3">
                     <p class="text-sm font-medium text-slate-900">{{ change.section }}</p>
                     @if (change.before) {
-                      <p class="mt-1 text-sm text-slate-400 line-through">{{ change.before }}</p>
+                      <p class="mt-1 text-sm text-slate-500 line-through">{{ change.before }}</p>
                     }
                     <p class="text-sm text-slate-700">{{ change.after }}</p>
                     @if (change.reason) {
@@ -222,7 +222,7 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
         @if (analyses.detailLoading()) {
           <p class="text-sm text-slate-500">Loading…</p>
         } @else {
-          <p class="text-sm text-slate-400">This analysis is no longer available.</p>
+          <p class="text-sm text-slate-500">This analysis is no longer available.</p>
         }
       </div>
     }

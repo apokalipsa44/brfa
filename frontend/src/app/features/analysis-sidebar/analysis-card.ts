@@ -13,9 +13,10 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
   selector: 'app-analysis-card',
   imports: [ScoreBadge],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { role: 'listitem' },
   template: `
-    <li
-      class="rounded-xl border p-2.5 transition-colors duration-150"
+    <div
+      class="block rounded-xl border p-2.5 transition-colors duration-150"
       [class.border-indigo-500]="isSelected()"
       [class.bg-indigo-50]="isSelected()"
       [class.border-slate-200]="!isSelected()"
@@ -30,9 +31,9 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
           (click)="selected.emit(summary().id)"
         >
           <div class="flex items-start justify-between gap-2">
-            <h3 class="min-w-0 flex-1 truncate text-sm font-medium text-slate-900" [title]="summary().title">
+            <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-900" [title]="summary().title">
               {{ summary().title }}
-            </h3>
+            </span>
             <app-score-badge [score]="summary().score" />
           </div>
           <p class="mt-1 flex items-center gap-1.5 text-xs" [class]="statusClasses()">
@@ -45,15 +46,15 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
               <span aria-hidden="true" class="flex h-3 w-3 items-center justify-center">{{ statusGlyph() }}</span>
             }
             <span [attr.aria-live]="working() ? 'polite' : null">{{ stageLabel() }}</span>
-            <span class="text-slate-400">·</span>
-            <span class="text-slate-400">{{ formatDate(summary().updatedAt) }}</span>
+            <span class="text-slate-600">·</span>
+            <span class="text-slate-600">{{ formatDate(summary().updatedAt) }}</span>
           </p>
         </button>
 
         <div class="relative shrink-0">
           <button
             type="button"
-            class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+            class="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
             aria-label="Actions for analysis"
             [attr.aria-expanded]="menuOpen()"
             (click)="menuOpen.set(!menuOpen())"
@@ -90,7 +91,7 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
           }
         </div>
       </div>
-    </li>
+    </div>
   `,
 })
 export class AnalysisCard {

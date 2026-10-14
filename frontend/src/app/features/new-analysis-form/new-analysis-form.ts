@@ -31,12 +31,12 @@ import { MAX_JOB_POSTING_CHARS } from '../../core/models';
       ></textarea>
 
       <div class="mt-1.5 flex items-center justify-between gap-3">
-        <p class="text-sm" [class]="hintClasses()">
+        <p class="text-sm text-slate-500">
           @if (hint(); as message) {
             {{ message }}
           }
         </p>
-        <p class="shrink-0 text-xs text-slate-400 tabular-nums" aria-live="polite">
+        <p class="shrink-0 text-xs text-slate-500 tabular-nums" aria-live="polite">
           {{ length() }} / {{ maxChars }} characters
         </p>
       </div>
@@ -75,10 +75,6 @@ export class NewAnalysisForm {
 
   protected readonly canSubmit = computed(
     () => this.cv.hasCv() && this.cv.ready() && this.length() > 0 && this.length() <= this.maxChars,
-  );
-
-  protected readonly hintClasses = computed(() =>
-    this.hint() === null ? 'text-slate-400' : 'text-slate-500',
   );
 
   protected onInput(event: Event): void {

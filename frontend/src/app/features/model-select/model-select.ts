@@ -34,7 +34,7 @@ import { CvContextStore } from '../../core/cv-context.store';
       </select>
       <button
         type="button"
-        class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none disabled:opacity-50"
+        class="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none disabled:opacity-50"
         [disabled]="cvContext.refreshing()"
         aria-label="Refresh model list"
         (click)="cvContext.refreshModels()"
