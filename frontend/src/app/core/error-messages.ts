@@ -1,0 +1,58 @@
+import { HttpErrorResponse } from '@angular/common/http';
+
+/** Friendly, action-oriented copy for the backend's stable error codes (docs/API.md §5). */
+const MESSAGES: Record<string, string> = {
+  MISSING_FILE: 'Choose a PDF file to upload.',
+  FILE_TOO_LARGE: 'The PDF is larger than 5 MB. Choose a smaller file.',
+  INVALID_PDF: 'That file is not a PDF. Choose a PDF file.',
+  PDF_NO_TEXT: 'The PDF has no extractable text. It looks like a scan.',
+  PDF_UNREADABLE: 'The PDF could not be read. It may be encrypted or corrupted.',
+  CV_NOT_FOUND: 'Upload a CV to start.',
+  CV_MISSING: 'Upload a CV to start.',
+  MODEL_NOT_READY: 'Load a model in LM Studio to continue.',
+  MODEL_BLANK: 'Choose a model.',
+  MODEL_NOT_FOUND: 'That model is not available in LM Studio.',
+  LLM_UNREACHABLE: 'LM Studio is not reachable. Start the server and try again.',
+  MISSING_JOB_DESCRIPTION: 'Paste a job posting.',
+  JOB_DESCRIPTION_TOO_LONG: 'The job posting is too long.',
+  ANALYSIS_NOT_FOUND: 'This analysis no longer exists.',
+  TITLE_BLANK: 'Enter a title.',
+  NOT_AWAITING_REVIEW: 'This analysis is no longer waiting for review.',
+  NO_SUGGESTIONS_APPROVED: 'Select at least one change to apply.',
+  NOT_FAILED: 'This analysis is not in a failed state.',
+  NOT_READY: 'The improved CV is not ready yet.',
+  RESULT_NOT_FOUND: 'The improved CV file is no longer available.',
+  LLM_INVALID_OUTPUT: 'The model returned an invalid response. Try again.',
+  LLM_ABORTED: 'The model was switched while this analysis ran. Try again.',
+  INTERNAL_ERROR: 'Something went wrong. Try again.',
+  BAD_REQUEST: 'The request was rejected. Check the input.',
+  NOT_FOUND: 'That resource no longer exists.',
+  METHOD_NOT_ALLOWED: 'That action is not allowed.',
+  UNSUPPORTED_MEDIA_TYPE: 'Unsupported file type.',
+  REQUEST_REJECTED: 'The request was rejected. Try again.',
+};
+
+export function errorMessage(code?: string | null, fallback = 'Something went wrong. Try again.'): string {
+  if (code && MESSAGES[code]) return MESSAGES[code];
+  return fallback;
+}
+
+/** The stable machine code of a ProblemDetail response, or null (docs/API.md §1.2). */
+export function errorCode(err: unknown): string | null {
+  if (err instanceof HttpErrorResponse) {
+    const body = err.error as { code?: unknown } | null;
+    if (body && typeof body.code === 'string') return body.code;
+  }
+  return null;
+}
+
+/** Maps any HTTP failure to friendly text, preferring the backend's ProblemDetail (docs/API.md §1.2). */
+export function problemMessage(err: unknown, fallback = 'Something went wrong. Try again.'): string {
+  if (err instanceof HttpErrorResponse) {
+    const body = err.error as { code?: unknown; detail?: unknown } | null;
+    if (body && typeof body.code === 'string') return errorMessage(body.code, fallback);
+    if (err.status === 0) return 'Cannot reach the backend. Is it running?';
+    return fallback;
+  }
+  return fallback;
+}
