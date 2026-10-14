@@ -25,7 +25,7 @@ import { CvContextStore } from '../../core/cv-context.store';
           <option value="">No models</option>
         } @else {
           @if (cvContext.activeModelId() === null) {
-            <option value="" disabled>Select a model</option>
+            <option value="">Select a model</option>
           }
           @for (model of cvContext.models(); track model.id) {
             <option [value]="model.id">{{ model.id }}</option>
