@@ -10,6 +10,10 @@ The app is a small **workspace**, not a form + job stack:
 - The **LLM model** is a global, persistent selection. Every analysis snapshots it at creation.
 - Each **analysis** is one posting processed against that context. It runs as an async, **two-stage**
   pipeline: evaluation pauses for the user's approval, then the rewrite produces the new PDF.
+- The posting can be **pasted as text** or **given as a link**; for a link the server fetches the
+  page itself (§4, `POST /api/analyses`).
+- A queued or running analysis can be **cancelled** and a cancelled or failed one can be
+  **retried** (`POST /api/analyses/{id}/cancel`, `/retry`).
 
 `docs/API.md` is the contract; the backend and frontend are implemented against it. The old
 `/api/cv-jobs*` endpoints and the per-job SSE streams were removed once the redesign shipped —
@@ -23,19 +27,37 @@ Only the workspace API below exists.
 ### 1.1 Analysis stage
 
 ```
-            (auto)                  (user approves)              (auto)
-QUEUED ──▶ EVALUATING ──▶ AWAITING_REVIEW ──▶ REWRITING ──▶ GENERATING_PDF ──▶ COMPLETED
-                  ▲                          (accepts only      │
-                  │                          approved           ▼
-                  │                          suggestions)    FAILED (from any non-terminal stage)
-                  └────── FAILED ──▶ retry re-runs the failed stage
+            (auto)                     (auto)                  (user approves)              (auto)
+QUEUED ──▶ FETCHING_POSTING* ──▶ EVALUATING ──▶ AWAITING_REVIEW ──▶ REWRITING ──▶ GENERATING_PDF ──▶ COMPLETED
+                                              ▲                          (accepts only      │
+                                              │                          approved           ▼
+                                              │                          suggestions)    FAILED (from any non-terminal stage)
+                                              └────── FAILED ──▶ retry re-runs the failed stage
+
+running/queued stages ──▶ CANCELLED ──▶ retry re-runs the interrupted stage
 ```
 
-Every non-terminal stage is async. `AWAITING_REVIEW` is a stable waiting point: the pipeline does
-**not** proceed until `POST /api/analyses/{id}/apply` is called.
+`FETCHING_POSTING` runs **only for link analyses** (before evaluation); pasted text goes straight to
+`EVALUATING`. Every non-terminal stage is async. `AWAITING_REVIEW` is a stable waiting point: the
+pipeline does **not** proceed until `POST /api/analyses/{id}/apply` is called.
 
-Indicative `progress` per stage: `QUEUED` 0, `EVALUATING` 15, `AWAITING_REVIEW` 40, `REWRITING` 65,
-`GENERATING_PDF` 90, `COMPLETED` 100. A failed analysis keeps the progress reached before the error.
+**Cancellable stages:** `QUEUED`, `FETCHING_POSTING`, `EVALUATING`, `REWRITING`, `GENERATING_PDF`.
+**Not cancellable:** `AWAITING_REVIEW`, `COMPLETED`, `FAILED`, `CANCELLED`.
+
+`CANCELLED` remembers which stage was interrupted in `interruptedStage` so retry knows where to
+resume. Retry (for `FAILED` or `CANCELLED`) re-runs the interrupted/failed stage from its start and
+**keeps everything earlier stages produced** (fetched posting text, evaluation and suggestions, and
+the approved suggestion ids when the rewrite was interrupted).
+
+Every run carries an **`attemptId`**: it starts at 1 and increases by one each time a new run
+starts (`apply`, `retry`). All state transitions, results and events carry the attempt id; a write
+from an outdated attempt (a cancelled task that finishes anyway, cancel racing a stage completion,
+cancel followed by a retry) is dropped by the server.
+
+Indicative `progress` per stage: `QUEUED` 0, `FETCHING_POSTING` 5, `EVALUATING` 15, `AWAITING_REVIEW`
+40, `REWRITING` 65, `GENERATING_PDF` 90, `COMPLETED` 100. A failed analysis keeps the progress
+reached before the error. `stageMessage` is a transient, human-readable sub-stage message (e.g.
+"Fetching the page" during `FETCHING_POSTING`) and `null` in every other stage.
 
 ### 1.2 Error format — RFC 9457 `ProblemDetail`
 
@@ -155,6 +177,9 @@ Analysis summary (list entry, `analysis.updated` payload, PATCH/POST response):
   "stage": "AWAITING_REVIEW",
   "score": 58,
   "progress": 40,
+  "attemptId": 1,
+  "interruptedStage": null,
+  "stageMessage": null,
   "createdAt": "2026-10-12T10:00:00Z",
   "updatedAt": "2026-10-12T10:03:12Z",
   "errorCode": null,
@@ -165,6 +190,9 @@ Analysis summary (list entry, `analysis.updated` payload, PATCH/POST response):
 - `title` — auto-generated `Employer · Position` when evaluation finishes (see §6.2), otherwise
   `Untitled analysis · 12 Oct 2026`. A user edit sticks and is never overwritten.
 - `score` — the 0-100 match score once evaluation is done, otherwise `null`.
+- `attemptId` — run counter, starts at 1, +1 per started run (see §1.1).
+- `interruptedStage` — the stage a `CANCELLED` analysis stopped in; `null` otherwise.
+- `stageMessage` — transient sub-stage message during `FETCHING_POSTING`, `null` otherwise.
 
 Analysis detail (`GET /api/analyses/{id}`) — summary **plus**:
 
@@ -175,11 +203,18 @@ Analysis detail (`GET /api/analyses/{id}`) — summary **plus**:
   "stage": "AWAITING_REVIEW",
   "score": 58,
   "progress": 40,
+  "attemptId": 1,
+  "interruptedStage": null,
+  "stageMessage": null,
   "createdAt": "…",
   "updatedAt": "…",
   "modelId": "qwen…/iq3_s.gguf",
   "errorCode": null,
   "errorMessage": null,
+  "sourceUrl": null,
+  "postingText": "…the posting text used for this analysis…",
+  "postingSource": "PASTED",
+  "postingTruncated": false,
   "summary": "The CV matches the core stack but lacks recent container-experience keywords.",
   "matchedKeywords": ["Java", "Spring Boot"],
   "missingKeywords": ["Kubernetes", "Terraform"],
@@ -201,6 +236,11 @@ Analysis detail (`GET /api/analyses/{id}`) — summary **plus**:
 }
 ```
 
+- `sourceUrl` — the link the user provided, or `null` for a pasted posting.
+- `postingText` — the resolved posting text the evaluation used. For a pasted analysis it equals the
+  pasted text; for a link analysis it is what the server extracted (`null` until the fetch succeeds).
+- `postingSource` — `PASTED | JSON_LD | STATIC_HTML | RENDERED_HTML` (`null` until resolved).
+- `postingTruncated` — `true` when extraction hit the posting length limit and the text was cut.
 - `summary`, `matchedKeywords`, `missingKeywords`, `suggestions` — present once evaluation done,
   otherwise `null`/`[]`.
 - `appliedChanges` — present once the rewrite ran, otherwise `null`.
@@ -210,20 +250,60 @@ Analysis detail (`GET /api/analyses/{id}`) — summary **plus**:
 
 ### `POST /api/analyses` — start a new analysis
 
-Body (JSON):
+Body (JSON) — provide **exactly one** of `jobPosting` (text) or `jobPostingUrl` (link):
 
 ```json
 { "jobPosting": "…" }
 ```
 
-Snapshots the active CV (text) and the active model, creates a `QUEUED` analysis and starts stage 1.
-Returns immediately; processing runs asynchronously.
+```json
+{ "jobPostingUrl": "https://example.com/jobs/123" }
+```
 
-- **202**: the analysis summary (stage `QUEUED`).
-- **400** `MISSING_JOB_DESCRIPTION` — absent/blank.
-- **400** `JOB_DESCRIPTION_TOO_LONG` — > 20,000 characters.
+Snapshots the active CV (text) and the active model, creates a `QUEUED` analysis and starts the
+pipeline. Returns immediately; processing runs asynchronously. For a link, the first stage is
+`FETCHING_POSTING`: the server opens the page, extracts the posting (JSON-LD, static HTML or a
+headless render — §4.1) and continues with the extracted text.
+
+- **202**: the analysis summary (stage `QUEUED`; a link analysis moves to `FETCHING_POSTING`).
+- **422** `POSTING_REQUIRED` — both fields absent or blank.
+- **422** `POSTING_SOURCE_CONFLICT` — both fields present.
+- **400** `JOB_DESCRIPTION_TOO_LONG` — pasted text > 20,000 characters.
 - **422** `CV_MISSING` — no active CV (upload one first).
 - **422** `MODEL_NOT_READY` — no ready model (load one in LM Studio first).
+
+### 4.1 Link posting extraction
+
+The server fetches the URL itself. It escalates and stops at the first step that yields a good
+result:
+
+1. **Plain HTTP fetch** (no browser). If schema.org `JobPosting` JSON-LD is present it is used
+   directly (`postingSource = JSON_LD`, **no LLM call**). Otherwise readable text is extracted from
+   the static HTML (`STATIC_HTML`).
+2. **Headless browser render** (Playwright, Chromium) when step 1 yields too little text. JSON-LD is
+   retried on the rendered DOM, then text extraction (`RENDERED_HTML`).
+3. For any text that came from HTML extraction (not JSON-LD), one structured-output LLM call with
+   the active model flags whether the page is a job posting and cleans navigation/ads out. If it is
+   not a job posting the analysis fails with `POSTING_NOT_FOUND`.
+
+Safety: only `http`/`https`; the hostname is resolved and loopback/private/link-local/unique-local/
+multicast/unspecified/cloud-metadata addresses are blocked (checked on every redirect and every
+sub-request the browser makes), with DNS-rebinding protection. Response size, content type
+(`text/html`/`application/xhtml+xml` only) and timeouts are bounded. Logins, CAPTCHAs, bot
+protection, proxies, cookies and site-specific scrapers are out of scope — a blocked page ends in a
+friendly error telling the user to paste the text.
+
+### `POST /api/analyses/{id}/cancel` — stop a queued or running analysis
+
+- **200**: the updated summary (stage `CANCELLED`, `interruptedStage` set). Cleanup continues in the
+  background; the analysis shows `CANCELLED` immediately. Cancelling an already-`CANCELLED`
+  analysis is idempotent and returns the current summary.
+- **409** `NOT_CANCELLABLE` — the analysis is in a stage that cannot be cancelled
+  (`AWAITING_REVIEW`, `COMPLETED`, `FAILED`); see §1.1. A repeat on an already-`CANCELLED`
+  analysis is **200**, not 409.
+- **404** `ANALYSIS_NOT_FOUND`.
+
+An `analysis.updated` event is broadcast for the transition.
 
 ### `GET /api/analyses` — list
 
@@ -263,10 +343,15 @@ must not apply anything else; missing requirements stay out of the CV (§6.1).
   regenerated unchanged.
 - **404** `ANALYSIS_NOT_FOUND`.
 
-### `POST /api/analyses/{id}/retry` — re-run the failed stage
+### `POST /api/analyses/{id}/retry` — re-run the interrupted or failed stage
 
-- **202**: the updated summary (stage moved back to the failed stage and processing resumes).
-- **409** `NOT_FAILED` — the analysis is not `FAILED`.
+Allowed for `FAILED` and `CANCELLED` analyses. Re-runs the stage that failed (`failedStage`) or was
+interrupted (`interruptedStage`) from its start, keeping earlier results (posting text, evaluation,
+suggestions, approved suggestion ids) and going back to the queue.
+
+- **202**: the updated summary (stage moved back to the failed/interrupted stage, `attemptId`
+  already incremented, processing resumes).
+- **409** `NOT_RETRYABLE` — the analysis is neither `FAILED` nor `CANCELLED`.
 - **404** `ANALYSIS_NOT_FOUND`.
 
 ### `GET /api/analyses/{id}/result` — download improved PDF
@@ -296,7 +381,8 @@ must not apply anything else; missing requirements stay out of the CV (§6.1).
 | `MODEL_BLANK` | 400 | `modelId` missing in the request body |
 | `MODEL_NOT_FOUND` | 400 | `modelId` unknown to LM Studio |
 | `LLM_UNREACHABLE` | 502 | LM Studio down or not answering (model management) |
-| `MISSING_JOB_DESCRIPTION` | 400 | posting missing/blank |
+| `POSTING_REQUIRED` | 422 | neither `jobPosting` nor `jobPostingUrl` given |
+| `POSTING_SOURCE_CONFLICT` | 422 | both `jobPosting` and `jobPostingUrl` given |
 | `JOB_DESCRIPTION_TOO_LONG` | 400 | posting > 20,000 chars |
 | `CV_MISSING` | 422 | analysis requires an active CV |
 | `MODEL_NOT_READY` | 422 | analysis requires a ready model (see §3) |
@@ -304,12 +390,24 @@ must not apply anything else; missing requirements stay out of the CV (§6.1).
 | `TITLE_BLANK` | 400 | rename with empty title |
 | `NOT_AWAITING_REVIEW` | 409 | `apply` while not awaiting review |
 | `NO_SUGGESTIONS_APPROVED` | 422 | `apply` with an empty approval list |
-| `NOT_FAILED` | 409 | `retry` while not failed |
+| `NOT_RETRYABLE` | 409 | `retry` while neither failed nor cancelled |
+| `NOT_CANCELLABLE` | 409 | `cancel` while not in a cancellable stage |
 | `NOT_READY` | 409 | result requested before completion |
 | `RESULT_NOT_FOUND` | 404 | completed but the file was cleaned up |
 | `LLM_INVALID_OUTPUT` | 502 | model output failed validation after max retries — retry |
 | `LLM_ABORTED` | 502 | LLM call interrupted (e.g. model switch during the call) — retry after the switch |
 | `INTERNAL_ERROR` | 500 | unexpected failure — retry |
+
+**Stage error codes** (they appear in `errorCode` after the stage fails, not as HTTP responses; the
+analysis is `FAILED` and retry re-runs the stage):
+
+| `code` | Stage | Meaning / suggested action |
+|---|---|---|
+| `URL_INVALID` | `FETCHING_POSTING` | not an `http(s)` URL, contains credentials, or is too long |
+| `URL_BLOCKED` | `FETCHING_POSTING` | the address (or a redirect/sub-request) is not publicly routable |
+| `FETCH_FAILED` | `FETCHING_POSTING` | the page could not be fetched (timeout, network, oversized response) |
+| `FETCH_NOT_HTML` | `FETCHING_POSTING` | the link does not point to a web page |
+| `POSTING_NOT_FOUND` | `FETCHING_POSTING` | no usable job posting found; the site may need a login — paste the text instead |
 
 ---
 
@@ -325,9 +423,11 @@ must not apply anything else; missing requirements stay out of the CV (§6.1).
 
 ### 6.2 Title extraction
 
-Evaluation returns `employer` and `position`. Unless the user already renamed the analysis, the
-backend sets `title = "<employer> · <position>"`; empty extraction falls back to
-`Untitled analysis · <date>`.
+For a pasted posting, evaluation returns `employer` and `position`. For a link, JSON-LD
+(`hiringOrganization.name`, `title`) or the extraction-cleanup call provides them before evaluation.
+Unless the user already renamed the analysis, the backend sets `title = "<employer> · <position>"`;
+empty extraction falls back to `Untitled analysis · <date>`. Evaluation can still refine the title
+after a link fetch.
 
 ### 6.3 Model switching while analyses run
 
@@ -402,4 +502,12 @@ Connection / replay semantics:
   default 1) — a local LLM handles one request at a time.
 - LLM calls: HTTP/1.1, read timeout 10 min, temperature 0.2, max output 8192 tokens, strict JSON
   schema (LM Studio `response_format`) with validation + up to 2 corrective retries.
+- Posting fetch (`cvchecker.posting-fetch.*`): `connect-timeout`, `read-timeout`, `total-timeout`,
+  `max-bytes`, `max-redirects`, `min-text-length`, `browser-enabled` (default true), `user-agent`,
+  `max-concurrent-browser`. The headless browser (Playwright Chromium) is installed once; if it is
+  unavailable, the fetch skips the render step and fails gracefully.
+- Cancellation: `POST /cancel` transitions to `CANCELLED` immediately and aborts the in-flight work
+  in the background (HTTP connection, browser page/context, queue slot). The executor slot is freed
+  promptly so a retry or the next queued analysis starts. Partial files from the cancelled attempt
+  are deleted.
 - SSE replay buffer bound: `cvchecker.events.replay-buffer` (default 1000 events).
