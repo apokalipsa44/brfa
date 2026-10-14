@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import pl.example.cvchecker.analysis.Analysis;
 import pl.example.cvchecker.analysis.AnalysisPipeline;
 import pl.example.cvchecker.analysis.AnalysisRegistry;
+import pl.example.cvchecker.analysis.AnalysisRuns;
 import pl.example.cvchecker.analysis.AnalysisStage;
 import pl.example.cvchecker.llm.Evaluation;
 import pl.example.cvchecker.llm.ModelContextService;
@@ -48,26 +49,39 @@ public class AnalysisController {
 
     private final AnalysisRegistry registry;
     private final AnalysisPipeline pipeline;
+    private final AnalysisRuns runs;
     private final CvContextStore cvStore;
     private final ModelContextService models;
 
-    public AnalysisController(AnalysisRegistry registry, AnalysisPipeline pipeline,
+    public AnalysisController(AnalysisRegistry registry, AnalysisPipeline pipeline, AnalysisRuns runs,
             CvContextStore cvStore, ModelContextService models) {
         this.registry = registry;
         this.pipeline = pipeline;
+        this.runs = runs;
         this.cvStore = cvStore;
         this.models = models;
     }
 
-    /** Starts a new analysis: snapshots the active CV + model, creates QUEUED and returns immediately. */
+    /**
+     * Starts a new analysis from either a pasted posting or a link (docs/API.md §4): snapshots the
+     * active CV + model, creates QUEUED and returns immediately. Link analyses resolve their text in
+     * the FETCHING_POSTING stage, so URL problems surface as stage failures, not here.
+     */
     @PostMapping
     public ResponseEntity<AnalysisSummary> create(@RequestBody(required = false) CreateAnalysisRequest body) {
         String posting = body == null ? null : body.jobPosting();
-        if (posting == null || posting.isBlank()) {
-            throw new ApiException(400, "MISSING_JOB_DESCRIPTION", "Job posting missing",
-                    "The 'jobPosting' field with the job posting text is required.");
+        String url = body == null ? null : body.jobPostingUrl();
+        boolean hasPosting = posting != null && !posting.isBlank();
+        boolean hasUrl = url != null && !url.isBlank();
+        if (hasPosting && hasUrl) {
+            throw new ApiException(422, "POSTING_SOURCE_CONFLICT", "Posting source conflict",
+                    "Provide either 'jobPosting' or 'jobPostingUrl', not both.");
         }
-        if (posting.length() > MAX_DESCRIPTION_CHARS) {
+        if (!hasPosting && !hasUrl) {
+            throw new ApiException(422, "POSTING_REQUIRED", "Posting required",
+                    "Provide either a 'jobPosting' text or a 'jobPostingUrl' link.");
+        }
+        if (hasPosting && posting.length() > MAX_DESCRIPTION_CHARS) {
             throw new ApiException(400, "JOB_DESCRIPTION_TOO_LONG", "Job posting too long",
                     "The job posting has " + posting.length() + " characters; the limit is 20000.");
         }
@@ -80,12 +94,14 @@ public class AnalysisController {
 
         String id = UUID.randomUUID().toString();
         String modelId = models.activeModelId();
-        Analysis analysis = new Analysis(id, cv.fileName(), cv.extractedText(), posting, modelId);
+        Analysis analysis = hasUrl
+                ? Analysis.fromUrl(id, cv.fileName(), cv.extractedText(), url.strip(), modelId)
+                : new Analysis(id, cv.fileName(), cv.extractedText(), posting, modelId);
         registry.create(analysis);
         // Never log CV/posting content (AGENTS.md): only the analysis id.
         log.info("Created analysis {} with model {}", id, modelId);
         AnalysisSummary created = analysis.summary(); // the QUEUED snapshot the 202 body must report
-        pipeline.start(analysis); // async: QUEUED → EVALUATING → AWAITING_REVIEW
+        pipeline.start(analysis); // async: QUEUED → (FETCHING_POSTING) → EVALUATING → AWAITING_REVIEW
 
         return ResponseEntity.accepted().body(created);
     }
@@ -155,18 +171,40 @@ public class AnalysisController {
         return ResponseEntity.accepted().body(rewriting);
     }
 
-    /** Re-runs the failed stage (docs/API.md §4). */
+    /**
+     * Re-runs a FAILED or CANCELLED analysis (docs/API.md §4), resuming at the stage it failed or was
+     * cancelled in; the 202 body already shows that stage.
+     */
     @PostMapping("/{id}/retry")
     public ResponseEntity<AnalysisSummary> retry(@PathVariable String id) {
         Analysis analysis = require(id);
-        if (analysis.stage() != AnalysisStage.FAILED) {
-            throw new ApiException(409, "NOT_FAILED", "Not failed",
-                    "Only a FAILED analysis can be retried.");
+        if (!analysis.resetForRetry()) {
+            throw new ApiException(409, "NOT_RETRYABLE", "Not retryable",
+                    "Only a FAILED or CANCELLED analysis can be retried.");
         }
-        analysis.resetForRetry(); // the 202 body already shows the stage that will re-run
         AnalysisSummary retrying = analysis.summary();
         pipeline.retry(analysis);
         return ResponseEntity.accepted().body(retrying);
+    }
+
+    /**
+     * Cancels a queued or running analysis (docs/API.md §1.1); aborting the worker also frees the
+     * pipeline slot. Idempotent: cancelling an already-CANCELLED analysis returns 200 with the same
+     * summary, while a non-cancellable stage (AWAITING_REVIEW/COMPLETED/FAILED) is a 409.
+     */
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<AnalysisSummary> cancel(@PathVariable String id) {
+        Analysis analysis = require(id);
+        if (analysis.stage() == AnalysisStage.CANCELLED) {
+            return ResponseEntity.ok(analysis.summary());
+        }
+        if (!analysis.cancel()) {
+            throw new ApiException(409, "NOT_CANCELLABLE", "Not cancellable",
+                    "Only a QUEUED, FETCHING_POSTING, EVALUATING, REWRITING or GENERATING_PDF analysis can"
+                            + " be cancelled.");
+        }
+        runs.abort(id); // stop the worker, abort its LLM call, release its resources
+        return ResponseEntity.ok(analysis.summary());
     }
 
     /** Downloads the improved PDF once the analysis is COMPLETED (docs/API.md §4). */

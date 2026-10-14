@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import pl.example.cvchecker.analysis.Analysis;
 import pl.example.cvchecker.analysis.AnalysisPipeline;
 import pl.example.cvchecker.analysis.AnalysisRegistry;
+import pl.example.cvchecker.analysis.AnalysisRuns;
 import pl.example.cvchecker.analysis.AnalysisStage;
 import pl.example.cvchecker.llm.Evaluation;
 import pl.example.cvchecker.llm.ModelContextService;
@@ -52,6 +53,9 @@ class AnalysisControllerTest {
 
     @MockitoBean
     AnalysisPipeline pipeline;
+
+    @MockitoBean
+    AnalysisRuns runs;
 
     @MockitoBean
     CvContextStore cvStore;
@@ -97,10 +101,33 @@ class AnalysisControllerTest {
     }
 
     @Test
-    void blankPostingReturns400() throws Exception {
+    void blankPostingReturns422() throws Exception {
         mvc.perform(post("/api/analyses").contentType(MediaType.APPLICATION_JSON).content("{\"jobPosting\":\"  \"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("MISSING_JOB_DESCRIPTION"));
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("POSTING_REQUIRED"));
+    }
+
+    @Test
+    void bothPostingAndUrlReturns422() throws Exception {
+        mvc.perform(post("/api/analyses").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"jobPosting\":\"text\",\"jobPostingUrl\":\"https://example.com/job\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("POSTING_SOURCE_CONFLICT"));
+    }
+
+    @Test
+    void urlCreateReturns202QueuedWithSourceUrl() throws Exception {
+        when(cvStore.current()).thenReturn(Optional.of(cv()));
+        when(models.isReady()).thenReturn(true);
+        when(models.activeModelId()).thenReturn("qwen/iq3_s.gguf");
+
+        mvc.perform(post("/api/analyses").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"jobPostingUrl\":\"https://example.com/job\"}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.stage").value("QUEUED"))
+                .andExpect(jsonPath("$.attemptId").value(1));
+
+        verify(pipeline).start(any(Analysis.class));
     }
 
     @Test
@@ -159,6 +186,11 @@ class AnalysisControllerTest {
                 .andExpect(jsonPath("$.suggestions[0].id").value("s1"))
                 .andExpect(jsonPath("$.suggestions[0].priority").value("HIGH"))
                 .andExpect(jsonPath("$.suggestions[0].proposal").exists())
+                .andExpect(jsonPath("$.postingText").value("job"))
+                .andExpect(jsonPath("$.postingSource").value("PASTED"))
+                .andExpect(jsonPath("$.postingTruncated").value(false))
+                .andExpect(jsonPath("$.sourceUrl").doesNotExist())
+                .andExpect(jsonPath("$.attemptId").value(1))
                 .andExpect(jsonPath("$.resultUrl").doesNotExist());
     }
 
@@ -234,12 +266,66 @@ class AnalysisControllerTest {
     }
 
     @Test
-    void retryWhileNotFailedReturns409() throws Exception {
+    void retryWhileNotFailedOrCancelledReturns409() throws Exception {
         when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
 
         mvc.perform(post("/api/analyses/a1/retry"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("NOT_FAILED"));
+                .andExpect(jsonPath("$.code").value("NOT_RETRYABLE"));
+    }
+
+    @Test
+    void retryCancelledResumesAtTheInterruptedStage() throws Exception {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "text", "job", "qwen");
+        analysis.transition(AnalysisStage.REWRITING, 65);
+        analysis.cancel();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(post("/api/analyses/a1/retry"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.stage").value("REWRITING"))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
+
+        verify(pipeline).retry(analysis);
+    }
+
+    @Test
+    void cancelRunningAbortsTheRunAndReturns200() throws Exception {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "text", "job", "qwen");
+        analysis.transition(AnalysisStage.EVALUATING, 15);
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(post("/api/analyses/a1/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stage").value("CANCELLED"))
+                .andExpect(jsonPath("$.interruptedStage").value("EVALUATING"));
+
+        verify(runs).abort("a1");
+    }
+
+    @Test
+    void cancelAlreadyCancelledIsIdempotent() throws Exception {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "text", "job", "qwen");
+        analysis.transition(AnalysisStage.EVALUATING, 15);
+        analysis.cancel();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(post("/api/analyses/a1/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stage").value("CANCELLED"));
+
+        verify(runs, never()).abort(any());
+    }
+
+    @Test
+    void cancelAtReviewGateReturns409() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(post("/api/analyses/a1/cancel"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NOT_CANCELLABLE"));
+
+        verify(runs, never()).abort(any());
     }
 
     @Test
