@@ -176,10 +176,12 @@ Analysis summary (list entry, `analysis.updated` payload, PATCH/POST response):
   "title": "Acme · Senior Java Developer",
   "stage": "AWAITING_REVIEW",
   "score": 58,
+  "shortDescription": "Payment APIs in Java and Spring Boot on a small platform team.",
   "progress": 40,
   "attemptId": 1,
   "interruptedStage": null,
   "stageMessage": null,
+  "appliedAt": null,
   "createdAt": "2026-10-12T10:00:00Z",
   "updatedAt": "2026-10-12T10:03:12Z",
   "errorCode": null,
@@ -190,6 +192,11 @@ Analysis summary (list entry, `analysis.updated` payload, PATCH/POST response):
 - `title` — auto-generated `Employer · Position` when evaluation finishes (see §6.2), otherwise
   `Untitled analysis · 12 Oct 2026`. A user edit sticks and is never overwritten.
 - `score` — the 0-100 match score once evaluation is done, otherwise `null`.
+- `shortDescription` — one or two sentences (capped at 200 characters) describing what the role is
+  about, produced by the same evaluation call (see §6.4). `null` until evaluation is done and for
+  analyses created before the field existed.
+- `appliedAt` — the local date (`"2026-10-14"`) the user applied to the job, or `null` when not
+  applied: *applied means `appliedAt != null`*. User-set via `PATCH`; the pipeline never changes it.
 - `attemptId` — run counter, starts at 1, +1 per started run (see §1.1).
 - `interruptedStage` — the stage a `CANCELLED` analysis stopped in; `null` otherwise.
 - `stageMessage` — transient sub-stage message during `FETCHING_POSTING`, `null` otherwise.
@@ -202,10 +209,12 @@ Analysis detail (`GET /api/analyses/{id}`) — summary **plus**:
   "title": "Acme · Senior Java Developer",
   "stage": "AWAITING_REVIEW",
   "score": 58,
+  "shortDescription": "Payment APIs in Java and Spring Boot on a small platform team.",
   "progress": 40,
   "attemptId": 1,
   "interruptedStage": null,
   "stageMessage": null,
+  "appliedAt": "2026-10-14",
   "createdAt": "…",
   "updatedAt": "…",
   "modelId": "qwen…/iq3_s.gguf",
@@ -314,16 +323,40 @@ An `analysis.updated` event is broadcast for the transition.
 - **200**: the analysis detail above.
 - **404** `ANALYSIS_NOT_FOUND` — unknown id (the registry is in-memory; a backend restart clears it).
 
-### `PATCH /api/analyses/{id}` — rename
+### `PATCH /api/analyses/{id}` — update title / applied to job
 
-Body:
+Partial update; every field is optional, at least one must be present. Allowed in **any** stage.
+A success broadcasts an `analysis.updated` event, so other tabs and the card update live. User
+values (`title`, `appliedAt`) are never overwritten by pipeline updates (retry, re-evaluation, stage
+transitions keep them).
+
+Body (each field optional; examples):
 
 ```json
 { "title": "Latest posting — Acme" }
 ```
 
-- **200**: the updated summary. Marks the title as user-edited (never auto-overwritten).
-- **400** `TITLE_BLANK` — blank/whitespace title.
+```json
+{ "applied": true }
+```
+
+```json
+{ "appliedAt": "2026-10-14" }
+```
+
+- `title` — sets the user title (existing behaviour); marked as user-edited and never
+  auto-overwritten.
+- `applied` (`true` | `false`) — `true` sets `appliedAt` to **today** when it is not set yet and
+  keeps the existing date when already set; `false` clears `appliedAt`.
+- `appliedAt` — ISO date (`"2026-10-14"`) or ISO date-time; sets the date explicitly and implies
+  applied. Time-of-day is reduced to the local date. Must not be in the future.
+- When both `applied` and `appliedAt` are present, `appliedAt` wins.
+
+- **200**: the updated summary.
+- **400** `TITLE_BLANK` — a `title` field was sent but is blank/whitespace.
+- **422** `NO_UPDATES` — empty body or none of `title` / `applied` / `appliedAt` present.
+- **422** `APPLIED_AT_INVALID` — `appliedAt` is not a parseable ISO date or date-time.
+- **422** `APPLIED_AT_FUTURE` — `appliedAt` is after today.
 - **404** `ANALYSIS_NOT_FOUND`.
 
 ### `POST /api/analyses/{id}/apply` — approve suggestions, start stage 2
@@ -387,7 +420,10 @@ suggestions, approved suggestion ids) and going back to the queue.
 | `CV_MISSING` | 422 | analysis requires an active CV |
 | `MODEL_NOT_READY` | 422 | analysis requires a ready model (see §3) |
 | `ANALYSIS_NOT_FOUND` | 404 | unknown analysis id |
-| `TITLE_BLANK` | 400 | rename with empty title |
+| `TITLE_BLANK` | 400 | `PATCH` with an empty `title` |
+| `NO_UPDATES` | 422 | `PATCH` with an empty body or no recognised fields |
+| `APPLIED_AT_INVALID` | 422 | `PATCH` with a malformed `appliedAt` |
+| `APPLIED_AT_FUTURE` | 422 | `PATCH` with an `appliedAt` after today |
 | `NOT_AWAITING_REVIEW` | 409 | `apply` while not awaiting review |
 | `NO_SUGGESTIONS_APPROVED` | 422 | `apply` with an empty approval list |
 | `NOT_RETRYABLE` | 409 | `retry` while neither failed nor cancelled |
@@ -442,6 +478,16 @@ Because LM Studio hosts **one** loaded model, a switch unloads the current one f
 - Analyses in `AWAITING_REVIEW` / `COMPLETED` are unaffected (no LLM work pending).
 - UI guidance: prefer to switch before starting analyses; the model picker flags this while
   analyses are active.
+
+### 6.4 Short description of the position
+
+The **same evaluation call** (no extra LLM request) also returns `shortDescription`: one or two
+plain-text sentences (about 160 characters) describing what the role is about — main technologies,
+product/domain, team or work mode when stated. It uses only facts present in the posting, never
+invents, repeats no employer name already in the title, contains no markdown, and is written in the
+language of the posting. The backend trims it and enforces a hard cap of 200 characters (cut at a
+word boundary with an ellipsis); an empty or missing value stays empty. Retrying the evaluation
+regenerates it. Analyses created before this field existed have none (the UI hides the line).
 
 ---
 
