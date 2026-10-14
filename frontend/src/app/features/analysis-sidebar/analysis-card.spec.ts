@@ -68,6 +68,14 @@ describe('AnalysisCard', () => {
     expect(fixture.nativeElement.querySelector('button[aria-pressed]')).toBeNull();
   });
 
+  it('treats a missing applied date as not applied', () => {
+    host.summary.set(makeSummary({ appliedAt: undefined as unknown as null }));
+    fixture.detectChanges();
+
+    const marker = fixture.nativeElement.querySelector('button[aria-pressed]') as HTMLButtonElement;
+    expect(marker.getAttribute('aria-pressed')).toBe('false');
+  });
+
   it('emits an applied change when the marker is clicked', () => {
     const marker = fixture.nativeElement.querySelector('button[aria-pressed]') as HTMLButtonElement;
     marker.click();

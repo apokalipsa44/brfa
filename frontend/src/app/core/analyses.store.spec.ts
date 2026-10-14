@@ -149,6 +149,37 @@ describe('AnalysesStore', () => {
     request.flush(summary('a1', { appliedAt: null }));
   });
 
+  it('re-applies after being cleared', () => {
+    seedAnalyses(http, [summary('a1', { appliedAt: null })]);
+
+    store.setApplied('a1', true);
+    http.expectOne('/api/analyses/a1').flush(summary('a1', { appliedAt: todayIso() }));
+
+    store.setApplied('a1', false);
+    http.expectOne('/api/analyses/a1').flush(summary('a1', { appliedAt: null }));
+    expect(store.analyses()[0].appliedAt).toBeNull();
+
+    store.setApplied('a1', true);
+    const request = http.expectOne('/api/analyses/a1');
+    expect(request.request.body).toEqual({ applied: true });
+    request.flush(summary('a1', { appliedAt: todayIso() }));
+
+    expect(store.analyses()[0].appliedAt).toBe(todayIso());
+  });
+
+  it('keeps the open detail in step with the applied marker', () => {
+    seedAnalyses(http, [summary('a1', { appliedAt: null })]);
+    store.select('a1');
+    http.expectOne('/api/analyses/a1').flush(detail('a1', { appliedAt: null }));
+
+    store.setApplied('a1', true);
+    expect(store.selected()?.appliedAt).toBe(todayIso());
+    http.expectOne('/api/analyses/a1').flush(summary('a1', { appliedAt: todayIso() }));
+
+    expect(store.analyses()[0].appliedAt).toBe(todayIso());
+    expect(store.selected()?.appliedAt).toBe(todayIso());
+  });
+
   it('sets an explicit applied date', () => {
     seedAnalyses(http, [summary('a1', { appliedAt: null })]);
 

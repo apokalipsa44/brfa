@@ -61,7 +61,7 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
             >
             <app-applied-toggle
               variant="switch"
-              [applied]="analysis.appliedAt !== null"
+              [applied]="!!analysis.appliedAt"
               [appliedAt]="analysis.appliedAt"
               (toggled)="setApplied(analysis, $event)"
               (datePicked)="setApplied(analysis, $event)"

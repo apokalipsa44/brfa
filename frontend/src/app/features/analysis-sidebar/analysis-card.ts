@@ -116,7 +116,7 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
             @if (showApplied()) {
               <app-applied-toggle
                 variant="marker"
-                [applied]="summary().appliedAt !== null"
+                [applied]="!!summary().appliedAt"
                 [appliedAt]="summary().appliedAt"
                 (toggled)="appliedChanged.emit({ id: summary().id, applied: $event })"
               />
