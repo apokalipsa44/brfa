@@ -52,13 +52,11 @@ const PRIORITY_TONE: Record<Priority, string> = {
               <span class="mt-1 block text-sm text-slate-700">{{ suggestion.proposal }}</span>
               
               @if (hasTextPair(suggestion)) {
-                <span class="mt-2 flex flex-col gap-1 text-xs">
-                  <span class="flex items-start gap-2">
-                    <span class="mt-0.5 shrink-0 text-slate-500 line-through">{{ suggestion.before }}</span>
-                  </span>
-                  <span class="flex items-start gap-2">
-                    <span class="mt-0.5 shrink-0 text-emerald-700">{{ suggestion.after }}</span>
-                  </span>
+                <span class="mt-2 flex min-w-0 flex-col gap-1 text-xs">
+                  <span class="block min-w-0 break-words text-slate-500 line-through">{{
+                    suggestion.before
+                  }}</span>
+                  <span class="block min-w-0 break-words text-emerald-700">{{ suggestion.after }}</span>
                 </span>
               }
             </span>

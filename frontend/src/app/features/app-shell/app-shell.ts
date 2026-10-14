@@ -22,10 +22,10 @@ import { Toast } from '../../shared/toast/toast';
     <div class="flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900">
       <app-top-bar (openSidebar)="sidebarOpen.set(true)" />
 
-      <div class="mx-auto flex w-full max-w-[1280px] flex-1 gap-4 overflow-hidden px-4 py-4">
+      <div class="mx-auto flex w-full max-w-[1440px] flex-1 gap-5 overflow-hidden px-6 py-4">
         <!-- Sidebar: fixed on large screens, drawer on small ones. -->
         <aside
-          class="hidden w-[22rem] shrink-0 flex-col rounded-xl border border-slate-200 bg-white p-3 lg:flex"
+          class="hidden w-[24rem] shrink-0 flex-col rounded-xl border border-slate-200 bg-white p-3.5 lg:flex xl:w-[27rem]"
           aria-label="Analyses"
         >
           <app-analysis-sidebar (newAnalysis)="showNew()" />
@@ -41,7 +41,7 @@ import { Toast } from '../../shared/toast/toast';
               (click)="sidebarOpen.set(false)"
             ></button>
             <aside
-              class="relative m-3 flex max-h-[calc(100dvh-1.5rem)] w-[22rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border border-slate-200 bg-white p-3"
+              class="relative m-3 flex max-h-[calc(100dvh-1.5rem)] w-[24rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border border-slate-200 bg-white p-3.5"
               aria-label="Analyses"
             >
               <app-analysis-sidebar (newAnalysis)="onNewFromDrawer()" />

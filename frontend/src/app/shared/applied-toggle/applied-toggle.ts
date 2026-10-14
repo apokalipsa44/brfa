@@ -24,16 +24,37 @@ import { formatAppliedDate, formatFullDate, todayIso } from '../../core/format';
     @if (variant() === 'marker') {
       <button
         type="button"
-        class="inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+        class="inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
         [class]="markerClasses()"
         [attr.aria-pressed]="applied()"
         [attr.aria-label]="text()"
         [title]="text()"
         (click)="toggled.emit(!applied())"
       >
-        <span aria-hidden="true">{{ applied() ? '✓' : '○' }}</span>
-        @if (applied() && appliedAt()) {
-          <span>{{ formatAppliedDate(appliedAt()!) }}</span>
+        @if (applied()) {
+          <svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 shrink-0" aria-hidden="true">
+            <path
+              fill-rule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <span>Applied</span>
+          @if (appliedAt()) {
+            <span class="font-normal text-emerald-600">· {{ formatAppliedDate(appliedAt()!) }}</span>
+          }
+        } @else {
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            class="h-3.5 w-3.5 shrink-0"
+            aria-hidden="true"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          <span>Mark applied</span>
         }
       </button>
     } @else {

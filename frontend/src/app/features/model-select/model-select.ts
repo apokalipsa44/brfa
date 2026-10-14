@@ -16,8 +16,9 @@ import { CvContextStore } from '../../core/cv-context.store';
       <label for="model" class="sr-only">Active model</label>
       <select
         id="model"
-        class="max-w-56 min-w-0 cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+        class="w-[clamp(14rem,28vw,26rem)] min-w-0 cursor-pointer truncate rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
         [value]="cvContext.activeModelId() ?? ''"
+        [title]="cvContext.activeModelId() ?? ''"
         [disabled]="cvContext.selecting() || cvContext.models().length === 0"
         (change)="onSelect($event)"
       >

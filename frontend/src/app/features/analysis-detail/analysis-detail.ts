@@ -37,7 +37,7 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
               />
             } @else {
               <div class="flex min-w-0 items-center gap-2">
-                <h2 class="truncate text-xl font-semibold text-slate-900">{{ analysis.title }}</h2>
+                <h2 class="min-w-0 truncate text-xl font-semibold text-slate-900">{{ analysis.title }}</h2>
                 <button
                   type="button"
                   class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-indigo-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
