@@ -60,6 +60,9 @@ public class EvaluationService {
                 + "\n<cv>\n" + truncate(cvText) + "\n</cv>\n<job>\n" + jobDescription + "\n</job>";
         Exception lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new LlmAbortedException("Evaluation aborted: the analysis run was cancelled.");
+            }
             try {
                 String userPrompt = retryHint(attempt) + prompt;
                 OpenAiChatOptions.Builder options = jsonSchemaOptions();
@@ -74,6 +77,10 @@ public class EvaluationService {
                 lastError = e;
                 log.warn("LLM evaluation attempt {}/{} produced invalid output", attempt, MAX_ATTEMPTS);
             } catch (Exception e) {
+                // A cancelled analysis aborts the call: stop at once instead of retrying.
+                if (Thread.currentThread().isInterrupted()) {
+                    throw new LlmAbortedException("Evaluation aborted: the analysis run was cancelled.");
+                }
                 // Call/conversion failure from Spring AI or the model: retry as well; a cold local
                 // model often fails the first request while loading.
                 lastError = e;

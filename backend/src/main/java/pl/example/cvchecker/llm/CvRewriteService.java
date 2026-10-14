@@ -75,6 +75,9 @@ public class CvRewriteService {
                 + "<approved-suggestions>\n" + contextJson + "\n</approved-suggestions>";
         Exception lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new LlmAbortedException("Rewrite aborted: the analysis run was cancelled.");
+            }
             try {
                 String userPrompt = retryHint(attempt) + prompt;
                 OpenAiChatOptions.Builder options = jsonSchemaOptions();
@@ -89,6 +92,10 @@ public class CvRewriteService {
                 lastError = e;
                 log.warn("LLM rewrite attempt {}/{} produced invalid output", attempt, MAX_ATTEMPTS);
             } catch (Exception e) {
+                // A cancelled analysis aborts the call: stop at once instead of retrying.
+                if (Thread.currentThread().isInterrupted()) {
+                    throw new LlmAbortedException("Rewrite aborted: the analysis run was cancelled.");
+                }
                 lastError = e;
                 log.warn("LLM rewrite attempt {}/{} failed: {}", attempt, MAX_ATTEMPTS, e.toString());
             }

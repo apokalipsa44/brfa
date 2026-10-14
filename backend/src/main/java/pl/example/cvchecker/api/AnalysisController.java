@@ -106,8 +106,10 @@ public class AnalysisController {
         boolean resultAvailable = analysis.stage() == AnalysisStage.COMPLETED
                 && analysis.resultFile() != null && Files.exists(analysis.resultFile());
         return new AnalysisDetail(id, analysis.title(), analysis.stage(), analysis.score(), analysis.progress(),
+                analysis.attemptId(), analysis.interruptedStage(), analysis.stageMessage(),
                 analysis.createdAt(), analysis.updatedAt(), analysis.modelId(), analysis.errorCode(),
                 analysis.errorMessage(),
+                analysis.sourceUrl(), analysis.postingText(), analysis.postingSource(), analysis.postingTruncated(),
                 evaluation == null ? null : evaluation.summary(),
                 evaluation == null ? List.of() : evaluation.matchedKeywords(),
                 evaluation == null ? List.of() : evaluation.missingKeywords(),

@@ -97,4 +97,84 @@ class AnalysisTest {
         assertThat(analysis.appliedChanges()).hasSize(1);
         assertThat(analysis.appliedChanges().get(0).section()).isEqualTo("Skills");
     }
+
+    /** Cancelling a cancellable stage records where it stopped so retry can resume there (§1.1). */
+    @Test
+    void cancelRemembersInterruptedStageForRetry() {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "CV text", "posting", "qwen");
+        analysis.transition(AnalysisStage.EVALUATING, 15);
+
+        assertThat(analysis.cancel()).isTrue();
+        assertThat(analysis.stage()).isEqualTo(AnalysisStage.CANCELLED);
+        assertThat(analysis.interruptedStage()).isEqualTo(AnalysisStage.EVALUATING);
+
+        assertThat(analysis.resetForRetry()).isTrue();
+        assertThat(analysis.stage()).isEqualTo(AnalysisStage.EVALUATING);
+        assertThat(analysis.interruptedStage()).isNull();
+    }
+
+    /** AWAITING_REVIEW is not cancellable: the analysis is waiting on the user, not on a worker. */
+    @Test
+    void cancelIsRejectedWhenTheStageIsNotCancellable() {
+        Analysis analysis = awaitingReview();
+
+        assertThat(analysis.cancel()).isFalse();
+        assertThat(analysis.stage()).isEqualTo(AnalysisStage.AWAITING_REVIEW);
+    }
+
+    /** A cancelled run that finishes late must not overwrite the CANCELLED state (§1.1). */
+    @Test
+    void aCancelledRunCannotWriteState() {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "CV text", "posting", "qwen");
+        long token = analysis.attemptId();
+        analysis.transition(AnalysisStage.EVALUATING, 15);
+        analysis.cancel();
+
+        assertThat(analysis.attemptTransition(token, AnalysisStage.AWAITING_REVIEW, 40)).isFalse();
+        assertThat(analysis.attemptFail(token, "INTERNAL_ERROR", "boom", AnalysisStage.EVALUATING)).isFalse();
+        assertThat(analysis.stage()).isEqualTo(AnalysisStage.CANCELLED);
+        assertThat(analysis.errorCode()).isNull();
+    }
+
+    /** Starting a new run invalidates the previous attempt's writes (attemptId guard, §1.1). */
+    @Test
+    void aStaleAttemptCannotOverwriteANewRun() {
+        Analysis analysis = awaitingReview();
+        long previous = analysis.attemptId();
+
+        analysis.beginRewrite(List.of("s1")); // increments attemptId
+
+        assertThat(analysis.attemptId()).isEqualTo(previous + 1);
+        assertThat(analysis.attemptTransition(previous, AnalysisStage.COMPLETED, 100)).isFalse();
+        assertThat(analysis.stage()).isEqualTo(AnalysisStage.REWRITING);
+    }
+
+    /** A link analysis has no posting text until FETCHING_POSTING resolves it (§4.1). */
+    @Test
+    void linkAnalysisResolvesPostingTextAndProvenance() {
+        Analysis analysis = Analysis.fromUrl("a1", "cv.pdf", "CV text", "https://example.com/job", "qwen");
+
+        assertThat(analysis.sourceUrl()).isEqualTo("https://example.com/job");
+        assertThat(analysis.postingText()).isNull();
+        assertThat(analysis.postingSource()).isNull();
+
+        long token = analysis.attemptId();
+        analysis.attemptSetPosting(token, "Extracted posting", PostingSource.STATIC_HTML, false, "Acme", "Dev");
+
+        assertThat(analysis.postingText()).isEqualTo("Extracted posting");
+        assertThat(analysis.postingSource()).isEqualTo(PostingSource.STATIC_HTML);
+        assertThat(analysis.title()).isEqualTo("Acme · Dev"); // from the structured-data fallback (§6.2)
+    }
+
+    /** A stale attempt must not clobber the posting provenance either. */
+    @Test
+    void staleAttemptCannotOverwriteThePosting() {
+        Analysis analysis = Analysis.fromUrl("a1", "cv.pdf", "CV text", "https://example.com/job", "qwen");
+        long previous = analysis.attemptId();
+        analysis.cancel();
+        analysis.resetForRetry(); // a new run starts; the old token is stale
+
+        assertThat(analysis.attemptSetPosting(previous, "late", PostingSource.JSON_LD, false, null, null)).isFalse();
+        assertThat(analysis.postingText()).isNull();
+    }
 }

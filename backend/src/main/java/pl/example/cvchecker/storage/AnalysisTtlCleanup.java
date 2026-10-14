@@ -62,6 +62,7 @@ public class AnalysisTtlCleanup {
 
     /** Stages a terminal analysis is eligible for cleanup. */
     static boolean isEligible(AnalysisStage stage) {
-        return stage == AnalysisStage.COMPLETED || stage == AnalysisStage.FAILED;
+        return stage == AnalysisStage.COMPLETED || stage == AnalysisStage.FAILED
+                || stage == AnalysisStage.CANCELLED;
     }
 }

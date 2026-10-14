@@ -10,6 +10,7 @@ import java.util.Locale;
 
 import pl.example.cvchecker.api.AnalysisSummary;
 import pl.example.cvchecker.llm.CvChange;
+import pl.example.cvchecker.llm.CvDocument;
 import pl.example.cvchecker.llm.Evaluation;
 import pl.example.cvchecker.llm.Suggestion;
 
@@ -18,6 +19,11 @@ import pl.example.cvchecker.llm.Suggestion;
  * {@link #eventLock}; {@code changeListener} fires after every change so the registry can broadcast
  * {@code analysis.updated} events. The analysis snapshots the CV text and the active model id at
  * creation, so replacing the CV or switching the model never disturbs an existing analysis.
+ *
+ * <p>Cancellation and stale runs (docs/API.md §1.1): every run carries an {@code attemptId}. The
+ * guarded {@code attempt*} mutators only take effect while the writing run's token is still the
+ * current attempt and the analysis was not cancelled, so a cancelled task that finishes anyway —
+ * or a cancel racing a stage completion — cannot overwrite the state.
  */
 public class Analysis {
 
@@ -30,7 +36,7 @@ public class Analysis {
     private final String id;
     private final String cvFileName;
     private final String cvText;
-    private final String jobPosting;
+    private final String sourceUrl;
     private final String modelId;
     private final Instant createdAt;
 
@@ -44,23 +50,46 @@ public class Analysis {
     private volatile List<AnalysisSuggestion> suggestions = List.of();
     private volatile List<String> approvedSuggestionIds;
     private volatile List<CvChange> appliedChanges;
+    private volatile CvDocument rewrittenDocument;
     private volatile Path resultFile;
     private volatile String errorCode;
     private volatile String errorMessage;
     private volatile AnalysisStage failedStage;
+    private volatile AnalysisStage interruptedStage;
+    private volatile long attemptId = 1;
+    private volatile String stageMessage;
+    private volatile String postingText;
+    private volatile PostingSource postingSource;
+    private volatile boolean postingTruncated;
+    private volatile String postingEmployer;
+    private volatile String postingPosition;
 
     /** Notified after every change so the registry can publish analysis.updated events. */
     private volatile Runnable changeListener;
 
+    /** Pasted posting: the text is known from the start (docs/API.md §4). */
     public Analysis(String id, String cvFileName, String cvText, String jobPosting, String modelId) {
-        this(id, cvFileName, cvText, jobPosting, modelId, Instant.now());
+        this(id, cvFileName, cvText, null, jobPosting, modelId, Instant.now());
     }
 
+    /** Test/creation seam with a fixed timestamp (docs/API.md §6.2 date fallback). */
     Analysis(String id, String cvFileName, String cvText, String jobPosting, String modelId, Instant createdAt) {
+        this(id, cvFileName, cvText, null, jobPosting, modelId, createdAt);
+    }
+
+    /** Link posting: the text is resolved by the FETCHING_POSTING stage (docs/API.md §4.1). */
+    public static Analysis fromUrl(String id, String cvFileName, String cvText, String sourceUrl, String modelId) {
+        return new Analysis(id, cvFileName, cvText, sourceUrl, null, modelId, Instant.now());
+    }
+
+    private Analysis(String id, String cvFileName, String cvText, String sourceUrl, String postingText,
+            String modelId, Instant createdAt) {
         this.id = id;
         this.cvFileName = cvFileName;
         this.cvText = cvText;
-        this.jobPosting = jobPosting;
+        this.sourceUrl = sourceUrl;
+        this.postingText = postingText;
+        this.postingSource = postingText == null ? null : PostingSource.PASTED;
         this.modelId = modelId;
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
@@ -75,37 +104,83 @@ public class Analysis {
         if (listener != null) listener.run();
     }
 
+    /** True when {@code token} is still the current run and the analysis was not cancelled. */
+    public boolean isAttemptCurrent(long token) {
+        return token == attemptId && stage != AnalysisStage.CANCELLED;
+    }
+
+    private boolean attemptCurrentLocked(long token) {
+        return token == attemptId && stage != AnalysisStage.CANCELLED;
+    }
+
     /** Moves the analysis to {@code newStage} with the stage's indicative progress (§1.1). */
     public void transition(AnalysisStage newStage, int newProgress) {
+        attemptTransition(attemptId, newStage, newProgress);
+    }
+
+    /**
+     * Guarded transition used by a running pipeline (docs/API.md §1.1). Dropped (returns false) when
+     * the run is stale or the analysis was cancelled.
+     */
+    public boolean attemptTransition(long token, AnalysisStage newStage, int newProgress) {
         synchronized (eventLock) {
+            if (!attemptCurrentLocked(token)) return false;
             this.stage = newStage;
             this.progress = newProgress;
+            this.stageMessage = null;
             this.updatedAt = Instant.now();
         }
         notifyChanged();
+        return true;
+    }
+
+    /** Sets a transient sub-stage message (e.g. "Fetching the page"); guarded like a transition. */
+    public boolean attemptStageMessage(long token, String message) {
+        synchronized (eventLock) {
+            if (!attemptCurrentLocked(token) || stage != AnalysisStage.FETCHING_POSTING) return false;
+            this.stageMessage = message;
+            this.updatedAt = Instant.now();
+        }
+        notifyChanged();
+        return true;
     }
 
     /** Marks the analysis FAILED; {@code failedStage} remembers what to re-run on retry. */
     public void fail(String code, String message, AnalysisStage failedStage) {
+        attemptFail(attemptId, code, message, failedStage);
+    }
+
+    /** Guarded failure used by a running pipeline (docs/API.md §1.1). */
+    public boolean attemptFail(long token, String code, String message, AnalysisStage failedStage) {
         synchronized (eventLock) {
+            if (!attemptCurrentLocked(token)) return false;
             this.stage = AnalysisStage.FAILED;
             this.errorCode = code;
             this.errorMessage = message;
             this.failedStage = failedStage;
+            this.stageMessage = null;
             this.updatedAt = Instant.now();
         }
         notifyChanged();
+        return true;
     }
 
     /** Stores the evaluation, scores it and assigns stable ids (s1..sN) to its suggestions. */
     public void setEvaluation(Evaluation evaluation) {
+        attemptSetEvaluation(attemptId, evaluation);
+    }
+
+    /** Guarded evaluation write used by a running pipeline (docs/API.md §1.1). */
+    public boolean attemptSetEvaluation(long token, Evaluation evaluation) {
         synchronized (eventLock) {
+            if (!attemptCurrentLocked(token)) return false;
             this.evaluation = evaluation;
             this.score = evaluation.matchScore();
             this.suggestions = assignIds(evaluation.suggestions());
             this.updatedAt = Instant.now();
         }
         notifyChanged();
+        return true;
     }
 
     /** Approves suggestions and starts stage 2 (called synchronously by {@code /apply}, §4). */
@@ -114,34 +189,125 @@ public class Analysis {
             this.approvedSuggestionIds = List.copyOf(approvedIds);
             this.stage = AnalysisStage.REWRITING;
             this.progress = 65;
+            this.stageMessage = null;
+            this.errorCode = null;
+            this.errorMessage = null;
+            this.attemptId++;
             this.updatedAt = Instant.now();
         }
         notifyChanged();
     }
 
+    /** Stores the rewrite result; kept so retry after a cancel during PDF generation can resume. */
     public void setAppliedChanges(List<CvChange> changes) {
-        this.appliedChanges = changes;
+        attemptSetAppliedChanges(attemptId, changes);
+    }
+
+    public void attemptSetAppliedChanges(long token, List<CvChange> changes) {
+        synchronized (eventLock) {
+            if (!attemptCurrentLocked(token)) return;
+            this.appliedChanges = changes;
+        }
+    }
+
+    public void attemptSetRewrittenDocument(long token, CvDocument document) {
+        synchronized (eventLock) {
+            if (!attemptCurrentLocked(token)) return;
+            this.rewrittenDocument = document;
+        }
     }
 
     public void setResultFile(Path resultFile) {
-        this.resultFile = resultFile;
+        attemptSetResultFile(attemptId, resultFile);
+    }
+
+    public void attemptSetResultFile(long token, Path resultFile) {
+        synchronized (eventLock) {
+            if (!attemptCurrentLocked(token)) return;
+            this.resultFile = resultFile;
+        }
+    }
+
+    /** Stores the resolved posting text and its provenance for a link analysis (docs/API.md §4.1). */
+    public boolean attemptSetPosting(long token, String text, PostingSource source, boolean truncated,
+            String employer, String position) {
+        synchronized (eventLock) {
+            if (!attemptCurrentLocked(token)) return false;
+            this.postingText = text;
+            this.postingSource = source;
+            this.postingTruncated = truncated;
+            if (employer != null && !employer.isBlank()) this.postingEmployer = employer.strip();
+            if (position != null && !position.isBlank()) this.postingPosition = position.strip();
+            this.updatedAt = Instant.now();
+        }
+        notifyChanged();
+        return true;
     }
 
     public void complete() {
-        transition(AnalysisStage.COMPLETED, 100);
+        attemptComplete(attemptId);
     }
 
-    /** Moves a FAILED analysis back to the failed stage so retry can re-run it (§4). */
-    public void resetForRetry() {
+    /** Guarded completion used by a running pipeline (docs/API.md §1.1). */
+    public boolean attemptComplete(long token) {
+        return attemptTransition(token, AnalysisStage.COMPLETED, 100);
+    }
+
+    /**
+     * Cancels a queued or running analysis (docs/API.md §1.1). The interrupted stage is remembered so
+     * retry can resume there.
+     *
+     * @return true when the analysis moved to CANCELLED; false when the current stage is not
+     *         cancellable (the caller decides between the idempotent 200 and a 409)
+     */
+    public boolean cancel() {
         synchronized (eventLock) {
-            AnalysisStage target = failedStage == null ? AnalysisStage.EVALUATING : failedStage;
-            this.stage = target;
-            this.progress = target == AnalysisStage.REWRITING ? 65 : 15;
+            if (!stage.isCancellable()) return false;
+            this.interruptedStage = stage;
+            this.stage = AnalysisStage.CANCELLED;
+            this.stageMessage = null;
             this.errorCode = null;
             this.errorMessage = null;
             this.updatedAt = Instant.now();
         }
         notifyChanged();
+        return true;
+    }
+
+    /**
+     * Moves a FAILED or CANCELLED analysis back to the stage to re-run so retry can resume it (§4),
+     * incrementing the attempt id so the previous run can no longer write.
+     *
+     * @return true when the analysis was reset; false when it was neither FAILED nor CANCELLED
+     */
+    public boolean resetForRetry() {
+        synchronized (eventLock) {
+            if (stage != AnalysisStage.FAILED && stage != AnalysisStage.CANCELLED) return false;
+            AnalysisStage target = failedStage != null ? failedStage
+                    : (interruptedStage != null ? interruptedStage : AnalysisStage.EVALUATING);
+            this.stage = target;
+            this.progress = progressFor(target);
+            this.errorCode = null;
+            this.errorMessage = null;
+            this.failedStage = null;
+            this.interruptedStage = null;
+            this.stageMessage = null;
+            this.attemptId++;
+            this.updatedAt = Instant.now();
+        }
+        notifyChanged();
+        return true;
+    }
+
+    private static int progressFor(AnalysisStage stage) {
+        return switch (stage) {
+            case QUEUED -> 0;
+            case FETCHING_POSTING -> 5;
+            case EVALUATING -> 15;
+            case REWRITING -> 65;
+            case GENERATING_PDF -> 90;
+            default -> 0;
+        };
     }
 
     /** Marks the title as user-edited; it is never auto-overwritten afterwards (§6.2). */
@@ -155,7 +321,8 @@ public class Analysis {
     }
 
     public AnalysisSummary summary() {
-        return new AnalysisSummary(id, title(), stage, score, progress, createdAt, updatedAt, errorCode, errorMessage);
+        return new AnalysisSummary(id, title(), stage, score, progress, attemptId, interruptedStage, stageMessage,
+                createdAt, updatedAt, errorCode, errorMessage);
     }
 
     /** Auto-generated "Employer · Position" once evaluation finishes, otherwise the date fallback. */
@@ -165,12 +332,14 @@ public class Analysis {
             String generated = joinNonBlank(" · ", evaluation.employer(), evaluation.position());
             if (!generated.isBlank()) return generated;
         }
+        String fromPosting = joinNonBlank(" · ", postingEmployer, postingPosition);
+        if (!fromPosting.isBlank()) return fromPosting;
         return "Untitled analysis · " + DATE.format(createdAt.atZone(ZoneId.systemDefault()));
     }
 
-    /** True once the analysis reached COMPLETED or FAILED (terminal states, §1.1). */
+    /** True once the analysis reached COMPLETED, FAILED or CANCELLED (terminal states, §1.1). */
     public boolean isTerminal() {
-        return stage == AnalysisStage.COMPLETED || stage == AnalysisStage.FAILED;
+        return stage.isTerminal();
     }
 
     public boolean hasSuggestion(String id) {
@@ -200,8 +369,22 @@ public class Analysis {
         return cvText;
     }
 
-    public String jobPosting() {
-        return jobPosting;
+    /** The link the user provided, or null for a pasted posting (§4). */
+    public String sourceUrl() {
+        return sourceUrl;
+    }
+
+    /** The resolved posting text used for evaluation; null for a link until FETCHING_POSTING succeeds. */
+    public String postingText() {
+        return postingText;
+    }
+
+    public PostingSource postingSource() {
+        return postingSource;
+    }
+
+    public boolean postingTruncated() {
+        return postingTruncated;
     }
 
     /** The model id active when the analysis was created (§3/§6.3). */
@@ -215,6 +398,20 @@ public class Analysis {
 
     public int progress() {
         return progress;
+    }
+
+    /** Monotonic run counter (docs/API.md §1.1); incremented when apply/retry start a new run. */
+    public long attemptId() {
+        return attemptId;
+    }
+
+    /** The stage a CANCELLED analysis stopped in, or null. */
+    public AnalysisStage interruptedStage() {
+        return interruptedStage;
+    }
+
+    public String stageMessage() {
+        return stageMessage;
     }
 
     public Instant createdAt() {
@@ -245,6 +442,11 @@ public class Analysis {
         return appliedChanges;
     }
 
+    /** The rewrite document of the last attempt, kept to resume PDF generation after a cancel. */
+    public CvDocument rewrittenDocument() {
+        return rewrittenDocument;
+    }
+
     public Path resultFile() {
         return resultFile;
     }
@@ -257,7 +459,7 @@ public class Analysis {
         return errorMessage;
     }
 
-    /** The stage that failed (EVALUATING/Rewriting); re-run on retry. */
+    /** The stage that failed (EVALUATING/REWRITING/...); re-run on retry. */
     public AnalysisStage failedStage() {
         return failedStage;
     }

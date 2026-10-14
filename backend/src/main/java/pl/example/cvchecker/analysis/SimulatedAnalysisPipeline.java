@@ -7,7 +7,6 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import pl.example.cvchecker.llm.CvChange;
@@ -21,7 +20,8 @@ import pl.example.cvchecker.storage.TempFileStorage;
 /**
  * Simulated analysis pipeline (active with {@code cvchecker.pipeline.mode=simulated}): walks the
  * stages with fixed delays and a canned evaluation so the two-stage flow can be tested without a
- * local LLM. The default is {@link RealAnalysisPipeline}.
+ * local LLM. The default is {@link RealAnalysisPipeline}. Like the real one, work runs through
+ * {@link AnalysisRuns} and stops quietly when cancelled.
  */
 @Component
 @ConditionalOnProperty(name = "cvchecker.pipeline.mode", havingValue = "simulated")
@@ -29,70 +29,88 @@ public class SimulatedAnalysisPipeline implements AnalysisPipeline {
 
     private final TempFileStorage storage;
     private final CvPdfRenderer renderer;
+    private final AnalysisRuns runs;
     private final Duration stageDelay;
 
-    public SimulatedAnalysisPipeline(TempFileStorage storage, CvPdfRenderer renderer,
+    public SimulatedAnalysisPipeline(TempFileStorage storage, CvPdfRenderer renderer, AnalysisRuns runs,
             @Value("${cvchecker.pipeline.stage-delay:2s}") Duration stageDelay) {
         this.storage = storage;
         this.renderer = renderer;
+        this.runs = runs;
         this.stageDelay = stageDelay;
     }
 
     @Override
-    @Async("pipelineExecutor")
     public void start(Analysis analysis) {
-        try {
-            if (analysis.stage() != AnalysisStage.EVALUATING) {
-                analysis.transition(AnalysisStage.EVALUATING, 15);
-            }
-            sleep();
-            analysis.setEvaluation(evaluation());
-            sleep();
-            analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            analysis.fail("INTERNAL_ERROR", "The pipeline was interrupted.", AnalysisStage.EVALUATING);
-        } catch (Exception e) {
-            analysis.fail("INTERNAL_ERROR", "Unexpected error while evaluating the CV.", AnalysisStage.EVALUATING);
-        }
+        runs.submit(analysis, () -> run(analysis));
     }
 
     @Override
-    @Async("pipelineExecutor")
     public void apply(Analysis analysis) {
-        try {
-            analysis.transition(AnalysisStage.GENERATING_PDF, 90);
-            sleep();
-            renderFakePdf(analysis);
-            analysis.setAppliedChanges(List.of(new CvChange("Skills", "Docker, CI/CD",
-                    "Docker, Kubernetes (basics), CI/CD", "Approved suggestion applied.")));
-            analysis.complete();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            analysis.fail("INTERNAL_ERROR", "The pipeline was interrupted.", AnalysisStage.REWRITING);
-        } catch (Exception e) {
-            analysis.fail("INTERNAL_ERROR", "Unexpected error while rewriting the CV.", AnalysisStage.REWRITING);
-        }
+        runs.submit(analysis, () -> run(analysis));
     }
 
     @Override
-    @Async("pipelineExecutor")
     public void retry(Analysis analysis) {
-        if (analysis.failedStage() == AnalysisStage.REWRITING) {
-            apply(analysis); // self-invocation; runs inline on the same executor thread
-        } else {
-            start(analysis);
+        runs.submit(analysis, () -> run(analysis));
+    }
+
+    private void run(Analysis analysis) {
+        long token = analysis.attemptId();
+        try {
+            AnalysisStage stage = analysis.stage();
+            if (stage == AnalysisStage.QUEUED || stage == AnalysisStage.FETCHING_POSTING
+                    || stage == AnalysisStage.EVALUATING) {
+                if (analysis.stage() == AnalysisStage.QUEUED) {
+                    if (!analysis.attemptTransition(token, AnalysisStage.EVALUATING, 15)) return;
+                }
+                sleep();
+                if (!analysis.isAttemptCurrent(token)) return;
+                if (!analysis.attemptSetEvaluation(token, evaluation())) return;
+                sleep();
+                analysis.attemptTransition(token, AnalysisStage.AWAITING_REVIEW, 40);
+                return;
+            }
+            if (stage == AnalysisStage.REWRITING || stage == AnalysisStage.GENERATING_PDF) {
+                if (analysis.stage() == AnalysisStage.REWRITING) {
+                    sleep();
+                    if (!analysis.isAttemptCurrent(token)) return;
+                }
+                if (!analysis.attemptTransition(token, AnalysisStage.GENERATING_PDF, 90)) return;
+                sleep();
+                renderFakePdf(analysis, token);
+                analysis.attemptSetAppliedChanges(token, List.of(new CvChange("Skills", "Docker, CI/CD",
+                        "Docker, Kubernetes (basics), CI/CD", "Approved suggestion applied.")));
+                analysis.attemptComplete(token);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            // A cancelled run stops quietly; anything else is an unexpected interruption.
+            if (analysis.isAttemptCurrent(token)) {
+                analysis.attemptFail(token, "INTERNAL_ERROR", "The pipeline was interrupted.",
+                        failedStageOf(analysis));
+            }
+        } catch (Exception e) {
+            analysis.attemptFail(token, "INTERNAL_ERROR", "Unexpected error while analysing the CV.",
+                    failedStageOf(analysis));
         }
+    }
+
+    private static AnalysisStage failedStageOf(Analysis analysis) {
+        return switch (analysis.stage()) {
+            case FETCHING_POSTING, REWRITING, GENERATING_PDF -> analysis.stage();
+            default -> AnalysisStage.EVALUATING;
+        };
     }
 
     /** Renders a trivial but valid selectable-text PDF as the result file. */
-    private void renderFakePdf(Analysis analysis) throws IOException {
+    private void renderFakePdf(Analysis analysis, long token) throws IOException {
         Path result = storage.root().resolve(analysis.id() + "-result.pdf");
         CvDocument document = new CvDocument("Improved CV", null, null, null,
                 "Improved by the simulated analysis pipeline.", List.of(), List.of(), List.of("Java", "Spring"),
                 List.of(), List.of());
         renderer.render(document, result);
-        analysis.setResultFile(result);
+        analysis.attemptSetResultFile(token, result);
     }
 
     private static Evaluation evaluation() {
