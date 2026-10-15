@@ -63,7 +63,7 @@ class RunHandleTest {
                 .callTimeout(Duration.ofSeconds(30))
                 .build();
 
-        RunHandle handle = new RunHandle("a1", 1);
+        RunHandle handle = new RunHandle();
         AtomicBoolean aborted = new AtomicBoolean(false);
         AtomicReference<IOException> failure = new AtomicReference<>();
 

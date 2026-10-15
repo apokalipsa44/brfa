@@ -13,7 +13,6 @@ import org.springframework.stereotype.Component;
 
 import pl.example.cvchecker.analysis.Analysis;
 import pl.example.cvchecker.analysis.AnalysisRegistry;
-import pl.example.cvchecker.analysis.AnalysisStage;
 
 /**
  * Removes analyses (and their result PDFs) older than the configured TTL (docs/API.md §8). Only
@@ -58,11 +57,5 @@ public class AnalysisTtlCleanup {
                 log.warn("Could not delete result file for analysis {}: {}", analysis.id(), e.getMessage());
             }
         }
-    }
-
-    /** Stages a terminal analysis is eligible for cleanup. */
-    static boolean isEligible(AnalysisStage stage) {
-        return stage == AnalysisStage.COMPLETED || stage == AnalysisStage.FAILED
-                || stage == AnalysisStage.CANCELLED;
     }
 }

@@ -45,9 +45,15 @@ public class CvController {
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CvContextResponse> upload(
-            @RequestParam(value = "file", required = false) MultipartFile file) throws IOException {
+            @RequestParam(value = "file", required = false) MultipartFile file) {
         validatePdf(file);
-        byte[] data = file.getBytes();
+        byte[] data;
+        try {
+            data = file.getBytes();
+        } catch (IOException e) {
+            throw new ApiException(400, "UPLOAD_FAILED", "Upload failed",
+                    "The uploaded file could not be read. Please try again.");
+        }
         final String text;
         try {
             text = extractor.extract(data);
@@ -59,7 +65,13 @@ public class CvController {
                     "The PDF is encrypted or corrupted and its text could not be read.");
         }
         String fileName = file.getOriginalFilename();
-        CvContext cv = store.place(fileName == null || fileName.isBlank() ? "cv.pdf" : fileName, data, text);
+        CvContext cv;
+        try {
+            cv = store.place(fileName == null || fileName.isBlank() ? "cv.pdf" : fileName, data, text);
+        } catch (IOException e) {
+            throw new ApiException(500, "UPLOAD_FAILED", "Upload failed",
+                    "The CV could not be stored on the server. Please try again.");
+        }
         return ResponseEntity.created(URI.create("/api/cv/" + cv.id())).body(toResponse(cv));
     }
 

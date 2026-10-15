@@ -36,7 +36,7 @@ class LmStudioRewriteLiveTest {
         String job = "Senior Java Developer wanted: Java, Spring Boot, Kubernetes, English B2. "
                 + "Deploy and operate services on Kubernetes clusters.";
 
-        Evaluation evaluation = evaluationService.evaluate(cv, job);
+        Evaluation evaluation = evaluationService.evaluate(cv, job, null);
         assertThat(evaluation.missingKeywords().toString().toLowerCase()).contains("kubernetes");
 
         CvRewriteResult result = rewriteService.rewrite(cv, job, evaluation, evaluation.suggestions(), null);

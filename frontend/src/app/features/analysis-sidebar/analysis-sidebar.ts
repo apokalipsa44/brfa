@@ -25,7 +25,9 @@ import { AnalysisCard } from './analysis-card';
       </button>
 
       @if (analyses.analyses().length === 0) {
-        <p class="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-6 text-center text-sm text-slate-500">
+        <p
+          class="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-6 text-center text-sm text-slate-500"
+        >
           No analyses yet. Paste a posting to check your CV.
         </p>
       } @else {

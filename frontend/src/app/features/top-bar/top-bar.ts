@@ -40,7 +40,9 @@ import { EventsService } from '../../core/sse/events.service';
 
       <div class="flex min-w-0 items-center gap-2">
         @if (!cv.hasCv()) {
-          <span class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-800">
+          <span
+            class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-800"
+          >
             No CV yet
           </span>
         }
@@ -55,7 +57,11 @@ import { EventsService } from '../../core/sse/events.service';
 
         @if (!cv.ready()) {
           <span class="hidden text-sm text-amber-700 sm:block">
-            {{ cv.models().length === 0 ? 'No models loaded' : 'Load a model in LM Studio to continue' }}
+            {{
+              cv.models().length === 0
+                ? 'No models loaded'
+                : 'Load a model in LM Studio to continue'
+            }}
           </span>
         }
       </div>

@@ -89,10 +89,12 @@ describe('AnalysesStore', () => {
     seedAnalyses(http, []);
 
     store.create('some posting');
-    http.expectOne('/api/analyses').flush(
-      { code: 'MODEL_NOT_READY', detail: 'No ready model' },
-      { status: 422, statusText: 'Unprocessable Entity' },
-    );
+    http
+      .expectOne('/api/analyses')
+      .flush(
+        { code: 'MODEL_NOT_READY', detail: 'No ready model' },
+        { status: 422, statusText: 'Unprocessable Entity' },
+      );
 
     expect(store.creating()).toBe(false);
     expect(store.actionError()).toContain('LM Studio');

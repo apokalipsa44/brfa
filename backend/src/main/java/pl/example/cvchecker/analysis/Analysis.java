@@ -32,7 +32,7 @@ public class Analysis {
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
 
     /** Single lock guarding stage transitions so events fire exactly once per change. */
-    public final Object eventLock = new Object();
+    private final Object eventLock = new Object();
 
     private final String id;
     private final String cvFileName;
@@ -477,10 +477,6 @@ public class Analysis {
         return suggestions;
     }
 
-    public List<String> approvedSuggestionIds() {
-        return approvedSuggestionIds;
-    }
-
     public List<CvChange> appliedChanges() {
         return appliedChanges;
     }
@@ -500,11 +496,6 @@ public class Analysis {
 
     public String errorMessage() {
         return errorMessage;
-    }
-
-    /** The stage that failed (EVALUATING/REWRITING/...); re-run on retry. */
-    public AnalysisStage failedStage() {
-        return failedStage;
     }
 
     private static List<AnalysisSuggestion> assignIds(List<Suggestion> raw) {

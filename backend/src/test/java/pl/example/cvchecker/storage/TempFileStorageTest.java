@@ -14,13 +14,13 @@ class TempFileStorageTest {
     Path root;
 
     @Test
-    void storeOriginalWritesBytesUnderRoot() throws Exception {
+    void storeCvWritesBytesUnderRoot() throws Exception {
         TempFileStorage storage = new TempFileStorage(root);
         byte[] data = "%PDF-1.4 test".getBytes();
 
-        Path stored = storage.storeOriginal("abc-123", data);
+        Path stored = storage.storeCv("abc-123", data);
 
-        assertThat(stored).isEqualTo(root.resolve("abc-123.pdf"));
+        assertThat(stored).isEqualTo(root.resolve("cv-abc-123.pdf"));
         assertThat(Files.readAllBytes(stored)).containsExactly(data);
     }
 }

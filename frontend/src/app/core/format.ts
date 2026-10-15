@@ -12,9 +12,11 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   if (hours < 24) return `${hours} h ago`;
   const days = Math.round(hours / 24);
   if (days <= 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`;
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(
-    new Date(then),
-  );
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(then));
 }
 
 /** "12 Oct 2026, 15:04" for the analysis header. */
@@ -56,7 +58,11 @@ export function formatAppliedDate(iso: string, now: Date = new Date()): string {
 export function formatFullDate(iso: string): string {
   const date = parseLocalDate(iso);
   if (!date) return '';
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
 }
 
 /** Today as an ISO local date (yyyy-MM-dd), matching the backend's appliedAt. */
@@ -64,11 +70,4 @@ export function todayIso(now: Date = new Date()): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${now.getFullYear()}-${month}-${day}`;
-}
-
-export function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '';
-  const kb = bytes / 1024;
-  if (kb < 1000) return `${Math.max(1, Math.round(kb))} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
 }

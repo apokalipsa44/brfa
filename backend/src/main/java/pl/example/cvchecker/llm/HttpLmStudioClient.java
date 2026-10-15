@@ -35,22 +35,24 @@ public class HttpLmStudioClient implements LmStudioClient {
 
     public HttpLmStudioClient(@Value("${spring.ai.openai.base-url}") String openAiBaseUrl,
             @Value("${cvchecker.lmstudio.base-url}") String nativeBaseUrl,
+            @Value("${cvchecker.lmstudio.connect-timeout:3s}") Duration connectTimeout,
+            @Value("${cvchecker.lmstudio.list-timeout:5s}") Duration listTimeout,
             @Value("${cvchecker.lmstudio.load-timeout:120s}") Duration loadTimeout,
             @Value("${cvchecker.lmstudio.probe-timeout:10s}") Duration probeTimeout) {
         this.openAiBaseUrl = openAiBaseUrl;
         this.nativeBaseUrl = nativeBaseUrl;
         var quick = new SimpleClientHttpRequestFactory();
-        quick.setConnectTimeout(Duration.ofSeconds(3));
-        quick.setReadTimeout(Duration.ofSeconds(5));
+        quick.setConnectTimeout(connectTimeout);
+        quick.setReadTimeout(listTimeout);
         this.listRestTemplate = new RestTemplate(quick);
         var probe = new SimpleClientHttpRequestFactory();
-        probe.setConnectTimeout(Duration.ofSeconds(3));
+        probe.setConnectTimeout(connectTimeout);
         probe.setReadTimeout(probeTimeout);
         this.probeRestTemplate = new RestTemplate(probe);
         // Loading a large model into VRAM can take tens of seconds; a short read timeout would
         // misreport a slow load as "unreachable" (docs/API.md §3).
         var slow = new SimpleClientHttpRequestFactory();
-        slow.setConnectTimeout(Duration.ofSeconds(3));
+        slow.setConnectTimeout(connectTimeout);
         slow.setReadTimeout(loadTimeout);
         this.loadRestTemplate = new RestTemplate(slow);
     }

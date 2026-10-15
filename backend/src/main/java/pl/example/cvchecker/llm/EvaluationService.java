@@ -50,10 +50,6 @@ public class EvaluationService {
         }
     }
 
-    public Evaluation evaluate(String cvText, String jobDescription) {
-        return evaluate(cvText, jobDescription, null);
-    }
-
     /**
      * @param model primary model id (the analysis snapshots it at creation). When blank, the model
      *              from {@code spring.ai.openai.chat.options.model} (env {@code LLM_MODEL}) is used.

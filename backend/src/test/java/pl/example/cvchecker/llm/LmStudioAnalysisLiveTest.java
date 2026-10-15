@@ -28,7 +28,7 @@ class LmStudioAnalysisLiveTest {
                 """;
         String job = "Senior Java Developer wanted: Java, Spring Boot, Kubernetes, English B2.";
 
-        Evaluation evaluation = service.evaluate(cv, job);
+        Evaluation evaluation = service.evaluate(cv, job, null);
 
         assertThat(evaluation.matchScore()).isBetween(0, 100);
         assertThat(evaluation.summary()).isNotBlank();

@@ -6,7 +6,10 @@ import java.nio.file.Path;
 
 import org.springframework.stereotype.Component;
 
-/** Job files (original PDFs now, result PDFs later) live in a per-run temp directory. */
+/**
+ * Temp files for the active CV PDF and analysis result PDFs live in a per-process temp directory
+ * (wiped with the process).
+ */
 @Component
 public class TempFileStorage {
 
@@ -18,13 +21,6 @@ public class TempFileStorage {
 
     TempFileStorage(Path root) {
         this.root = root;
-    }
-
-    /** Stores the uploaded original PDF as {@code <root>/<jobId>.pdf} and returns its path. */
-    public Path storeOriginal(String jobId, byte[] data) throws IOException {
-        Path file = root.resolve(jobId + ".pdf");
-        Files.write(file, data);
-        return file;
     }
 
     /** Stores the persistent CV PDF as {@code <root>/cv-<cvId>.pdf} (docs/API.md §2). */

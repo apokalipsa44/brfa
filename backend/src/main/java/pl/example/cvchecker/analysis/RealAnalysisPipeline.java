@@ -19,13 +19,17 @@ import pl.example.cvchecker.llm.EvaluationService;
 import pl.example.cvchecker.llm.LlmAbortedException;
 import pl.example.cvchecker.llm.LlmInvalidOutputException;
 import pl.example.cvchecker.pdf.CvPdfRenderer;
+import pl.example.cvchecker.posting.PostingException;
+import pl.example.cvchecker.posting.PostingResolver;
+import pl.example.cvchecker.posting.ResolvedPosting;
 import pl.example.cvchecker.storage.TempFileStorage;
 
 /**
- * Real two-stage analysis pipeline (docs/API.md §1.1): evaluate (LLM step #1) → pause at
- * AWAITING_REVIEW → rewrite (LLM step #2, approved suggestions only) → render the ATS PDF. Every
- * stage change is an {@link AnalysisUpdatedEvent}; any exception becomes a FAILED state with the
- * failed stage remembered for retry (never an unhandled executor crash).
+ * Real two-stage analysis pipeline (docs/API.md §1.1): for a link analysis resolve the posting in
+ * FETCHING_POSTING, then evaluate (LLM step #1) → pause at AWAITING_REVIEW → rewrite (LLM step #2,
+ * approved suggestions only) → render the ATS PDF. Every stage change is an
+ * {@link AnalysisUpdatedEvent}; any exception becomes a FAILED state with the failed stage
+ * remembered for retry (never an unhandled executor crash).
  *
  * <p>Work runs through {@link AnalysisRuns} so it can be cancelled: the dispatcher switches on the
  * analysis' current stage, every write is guarded by the run's attempt id, and a cancelled run stops
@@ -42,14 +46,16 @@ public class RealAnalysisPipeline implements AnalysisPipeline {
     private final CvPdfRenderer renderer;
     private final TempFileStorage storage;
     private final AnalysisRuns runs;
+    private final PostingResolver postingResolver;
 
     public RealAnalysisPipeline(EvaluationService evaluationService, CvRewriteService rewriteService,
-            CvPdfRenderer renderer, TempFileStorage storage, AnalysisRuns runs) {
+            CvPdfRenderer renderer, TempFileStorage storage, AnalysisRuns runs, PostingResolver postingResolver) {
         this.evaluationService = evaluationService;
         this.rewriteService = rewriteService;
         this.renderer = renderer;
         this.storage = storage;
         this.runs = runs;
+        this.postingResolver = postingResolver;
     }
 
     @Override
@@ -101,9 +107,13 @@ public class RealAnalysisPipeline implements AnalysisPipeline {
         }
     }
 
-    /** LLM step #1 → suggestions scored and staged for review. */
+    /** FETCHING_POSTING → EVALUATING (LLM step #1) → suggestions scored and staged for review. */
     private void runEvaluation(Analysis analysis, long token) {
-        if (analysis.stage() == AnalysisStage.QUEUED) {
+        if (analysis.sourceUrl() != null && analysis.postingText() == null) {
+            if (!fetchPosting(analysis, token)) return;
+        }
+        if (!analysis.isAttemptCurrent(token)) return;
+        if (analysis.stage() == AnalysisStage.QUEUED || analysis.stage() == AnalysisStage.FETCHING_POSTING) {
             if (!analysis.attemptTransition(token, AnalysisStage.EVALUATING, 15)) return;
         }
         if (!analysis.isAttemptCurrent(token)) return;
@@ -112,6 +122,29 @@ public class RealAnalysisPipeline implements AnalysisPipeline {
         if (!analysis.isAttemptCurrent(token)) return;
         if (!analysis.attemptSetEvaluation(token, evaluation)) return;
         analysis.attemptTransition(token, AnalysisStage.AWAITING_REVIEW, 40);
+    }
+
+    /**
+     * FETCHING_POSTING (docs/API.md §4.1): resolves the link to posting text. A fetch failure fails
+     * the stage with the contract's error code (retry re-runs FETCHING_POSTING); a cancelled run
+     * stops quietly via the attempt guards.
+     */
+    private boolean fetchPosting(Analysis analysis, long token) {
+        if (analysis.stage() != AnalysisStage.FETCHING_POSTING) {
+            if (!analysis.attemptTransition(token, AnalysisStage.FETCHING_POSTING, 5)) return false;
+        }
+        analysis.attemptStageMessage(token, "Fetching the page");
+        try {
+            ResolvedPosting posting = postingResolver.resolve(analysis.sourceUrl(), analysis.modelId());
+            return analysis.attemptSetPosting(token, posting.text(), posting.source(), posting.truncated(),
+                    posting.employer(), posting.position());
+        } catch (PostingException e) {
+            fail(analysis, token, e.code().name(), e.getMessage(), e);
+            return false;
+        } catch (IOException e) {
+            fail(analysis, token, "FETCH_FAILED", "The page could not be fetched.", e);
+            return false;
+        }
     }
 
     /** LLM step #2 (approved suggestions only) → PDF; resumes from the cached rewrite if possible. */

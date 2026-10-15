@@ -45,14 +45,14 @@ class EvaluationServiceTest {
         Evaluation good = evaluation(58);
         when(call.entity(Evaluation.class)).thenReturn(good);
 
-        assertThat(service.evaluate("cv", "job")).isEqualTo(good);
+        assertThat(service.evaluate("cv", "job", null)).isEqualTo(good);
     }
 
     @Test
     void retriesInvalidOutputThenSucceeds() {
         when(call.entity(Evaluation.class)).thenReturn(evaluation(150), evaluation(61));
 
-        assertThat(service.evaluate("cv", "job").matchScore()).isEqualTo(61);
+        assertThat(service.evaluate("cv", "job", null).matchScore()).isEqualTo(61);
         verify(call, times(2)).entity(Evaluation.class);
     }
 
@@ -60,7 +60,7 @@ class EvaluationServiceTest {
     void failsAfterMaxAttempts() {
         when(call.entity(Evaluation.class)).thenReturn(evaluation(150));
 
-        assertThatThrownBy(() -> service.evaluate("cv", "job")).isInstanceOf(LlmInvalidOutputException.class);
+        assertThatThrownBy(() -> service.evaluate("cv", "job", null)).isInstanceOf(LlmInvalidOutputException.class);
         verify(call, times(3)).entity(Evaluation.class);
     }
 
@@ -69,7 +69,7 @@ class EvaluationServiceTest {
         when(call.entity(eq(Evaluation.class))).thenThrow(new RuntimeException("model loading"))
                 .thenReturn(evaluation(70));
 
-        assertThat(service.evaluate("cv", "job").matchScore()).isEqualTo(70);
+        assertThat(service.evaluate("cv", "job", null).matchScore()).isEqualTo(70);
     }
 
     @Test
@@ -107,7 +107,7 @@ class EvaluationServiceTest {
                 List.of(), "ok", "   Backend role in Java.   ");
         when(call.entity(Evaluation.class)).thenReturn(dirty);
 
-        assertThat(service.evaluate("cv", "job").shortDescription()).isEqualTo("Backend role in Java.");
+        assertThat(service.evaluate("cv", "job", null).shortDescription()).isEqualTo("Backend role in Java.");
     }
 
     private static Evaluation evaluation(int score) {

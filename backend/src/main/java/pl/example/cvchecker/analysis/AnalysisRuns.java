@@ -26,7 +26,7 @@ public class AnalysisRuns {
 
     /** Submits {@code work} for the analysis and returns its handle (already registered for cancel). */
     public RunHandle submit(Analysis analysis, Runnable work) {
-        RunHandle handle = new RunHandle(analysis.id(), analysis.attemptId());
+        RunHandle handle = new RunHandle();
         active.put(analysis.id(), handle);
         Future<?> future = executor.submit(() -> {
             RunHandle.setCurrent(handle);

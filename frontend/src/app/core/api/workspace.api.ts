@@ -30,7 +30,9 @@ export class WorkspaceApi {
   getCv(): Observable<CvInfo | null> {
     return this.http
       .get<CvInfo>('/api/cv')
-      .pipe(catchError((err: unknown) => (isNotFound(err) ? of(null) : throwError(() => err as Error))));
+      .pipe(
+        catchError((err: unknown) => (isNotFound(err) ? of(null) : throwError(() => err as Error))),
+      );
   }
 
   /** Model candidates, the active selection and readiness (docs/API.md §3). */
@@ -72,11 +74,6 @@ export class WorkspaceApi {
 
   deleteAnalysis(id: string): Observable<void> {
     return this.http.delete<void>(`/api/analyses/${encodeURIComponent(id)}`);
-  }
-
-  /** Result download URL (docs/API.md §4). */
-  resultUrl(id: string): string {
-    return `/api/analyses/${encodeURIComponent(id)}/result`;
   }
 }
 

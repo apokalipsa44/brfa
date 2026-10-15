@@ -45,7 +45,9 @@ describe('NewAnalysisForm', () => {
     http = TestBed.inject(HttpTestingController);
 
     http.expectOne('/api/cv').flush('missing', { status: 404, statusText: 'Not Found' });
-    http.expectOne('/api/llm/models').flush({ models: [], activeModelId: null, ready: false, reason: null });
+    http
+      .expectOne('/api/llm/models')
+      .flush({ models: [], activeModelId: null, ready: false, reason: null });
     http.expectOne('/api/analyses').flush([]);
     TestBed.inject(EventsService).disconnect();
 

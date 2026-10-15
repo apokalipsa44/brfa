@@ -31,6 +31,8 @@ cvchecker:
   lmstudio:
     # native v1 REST API root, without the OpenAI-compat /v1 suffix (docs/API.md §3)
     base-url: ${LM_STUDIO_BASE_URL:http://localhost:1234}
+    connect-timeout: 3s     # TCP connect to LM Studio; the server is local, so this stays short
+    list-timeout: 5s        # GET /api/v1/models answers fast; a slow answer means "unreachable"
     load-timeout: 120s   # loading a model into VRAM can take tens of seconds — not a timeout (docs/API.md §3)
     probe-timeout: 10s   # the 1-token readiness probe must not wait for a slow answering model (docs/API.md §3)
   events:

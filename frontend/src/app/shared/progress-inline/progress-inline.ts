@@ -4,6 +4,7 @@ import { AnalysisStage } from '../../core/models';
 
 const STAGE_TEXT: Record<AnalysisStage, string> = {
   QUEUED: 'Waiting for a slot',
+  FETCHING_POSTING: 'Fetching the posting from the link',
   EVALUATING: 'Checking your CV against the posting',
   AWAITING_REVIEW: 'Waiting for your review',
   REWRITING: 'Applying the approved changes',
@@ -39,7 +40,8 @@ export class ProgressInline {
   readonly stage = input.required<AnalysisStage>();
   readonly progress = input.required<number>();
 
-  protected readonly text = computed(
-    () => STAGE_TEXT[this.stage()] ?? 'Working',
-  );
+  /** Transient sub-stage message from the backend (docs/API.md §4); overrides the stage text. */
+  readonly message = input<string | null>(null);
+
+  protected readonly text = computed(() => this.message() ?? STAGE_TEXT[this.stage()] ?? 'Working');
 }

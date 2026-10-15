@@ -122,7 +122,8 @@ export class AnalysesStore {
     this._actionError.set(null);
     this.api.applyAnalysis(id, approvedSuggestionIds).subscribe({
       next: (summary) => this.upsert(summary),
-      error: (err: unknown) => this._actionError.set(problemMessage(err, 'The changes could not be applied.')),
+      error: (err: unknown) =>
+        this._actionError.set(problemMessage(err, 'The changes could not be applied.')),
     });
   }
 
@@ -133,19 +134,17 @@ export class AnalysesStore {
         this.upsert(summary);
         this.loadDetail(id);
       },
-      error: (err: unknown) => this._actionError.set(problemMessage(err, 'The retry could not be started.')),
+      error: (err: unknown) =>
+        this._actionError.set(problemMessage(err, 'The retry could not be started.')),
     });
   }
 
   remove(id: string): void {
     this.api.deleteAnalysis(id).subscribe({
       next: () => this.dropLocally(id),
-      error: (err: unknown) => this._actionError.set(problemMessage(err, 'The analysis could not be deleted.')),
+      error: (err: unknown) =>
+        this._actionError.set(problemMessage(err, 'The analysis could not be deleted.')),
     });
-  }
-
-  clearActionError(): void {
-    this._actionError.set(null);
   }
 
   /** Applies an `analysis.updated` event. */
@@ -153,13 +152,20 @@ export class AnalysesStore {
     const previous = this._analyses().find((a) => a.id === summary.id) ?? null;
     this.upsert(summary);
 
-    const detailNeeded =
-      summary.id === this._selectedId() && !this._details()[summary.id];
+    const detailNeeded = summary.id === this._selectedId() && !this._details()[summary.id];
     const stageChanged = previous?.stage !== summary.stage;
-    if (summary.stage === 'AWAITING_REVIEW' || detailNeeded || (stageChanged && summary.id === this._selectedId())) {
+    if (
+      summary.stage === 'AWAITING_REVIEW' ||
+      detailNeeded ||
+      (stageChanged && summary.id === this._selectedId())
+    ) {
       this.loadDetail(summary.id);
     }
-    if (summary.stage === 'COMPLETED' && previous?.stage !== 'COMPLETED' && summary.id !== this._selectedId()) {
+    if (
+      summary.stage === 'COMPLETED' &&
+      previous?.stage !== 'COMPLETED' &&
+      summary.id !== this._selectedId()
+    ) {
       this.toast.show(`"${summary.title}" is ready`);
     }
   }
@@ -167,10 +173,6 @@ export class AnalysesStore {
   /** Applies an `analysis.deleted` event (also used after a local delete). */
   onAnalysisDeleted(id: string): void {
     this.dropLocally(id);
-  }
-
-  refreshDetail(id: string): void {
-    this.loadDetail(id);
   }
 
   private loadDetail(id: string): void {
@@ -203,9 +205,7 @@ export class AnalysesStore {
     this._analyses.update((list) =>
       list.map((a) => (a.id === id ? { ...a, ...fields } : a)).sort(byNewest),
     );
-    this._details.update((map) =>
-      map[id] ? { ...map, [id]: { ...map[id], ...fields } } : map,
-    );
+    this._details.update((map) => (map[id] ? { ...map, [id]: { ...map[id], ...fields } } : map));
   }
 
   private dropLocally(id: string): void {
@@ -224,10 +224,17 @@ function byNewest(a: AnalysisSummary, b: AnalysisSummary): number {
 }
 
 /** Stage helpers shared by the UI. */
-export const ACTIVE_STAGES: readonly AnalysisStage[] = ['QUEUED', 'EVALUATING', 'REWRITING', 'GENERATING_PDF'];
+const ACTIVE_STAGES: readonly AnalysisStage[] = [
+  'QUEUED',
+  'FETCHING_POSTING',
+  'EVALUATING',
+  'REWRITING',
+  'GENERATING_PDF',
+];
 
 export const STAGE_LABELS: Record<AnalysisStage, string> = {
   QUEUED: 'Queued',
+  FETCHING_POSTING: 'Fetching the posting',
   EVALUATING: 'Checking your CV',
   AWAITING_REVIEW: 'Needs review',
   REWRITING: 'Applying changes',

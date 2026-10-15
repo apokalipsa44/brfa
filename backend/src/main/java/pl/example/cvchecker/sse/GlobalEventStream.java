@@ -21,6 +21,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
+import jakarta.annotation.PreDestroy;
+
 import pl.example.cvchecker.analysis.AnalysisDeletedEvent;
 import pl.example.cvchecker.analysis.AnalysisUpdatedEvent;
 
@@ -118,6 +120,11 @@ public class GlobalEventStream {
     @EventListener
     public void onCvUpdated(CvUpdatedEvent event) {
         publish("cv.updated", Map.of());
+    }
+
+    @PreDestroy
+    void shutdownHeartbeat() {
+        heartbeatScheduler.shutdownNow();
     }
 
     /** Assigns the next global id, buffers the frame, and fans it out to every open connection. */

@@ -7,6 +7,7 @@
 /** Analysis stages (docs/API.md §1.1). Stage 1 ends at AWAITING_REVIEW, stage 2 starts at REWRITING. */
 export type AnalysisStage =
   | 'QUEUED'
+  | 'FETCHING_POSTING'
   | 'EVALUATING'
   | 'AWAITING_REVIEW'
   | 'REWRITING'
@@ -30,6 +31,8 @@ export interface AnalysisSummary {
   progress: number;
   createdAt: string;
   updatedAt: string;
+  /** Transient sub-stage message during FETCHING_POSTING, null otherwise (docs/API.md §4). */
+  stageMessage?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
 }
@@ -90,7 +93,3 @@ export const MAX_JOB_POSTING_CHARS = 20_000;
 
 /** Maximum CV size enforced by the backend (docs/API.md §2). */
 export const MAX_CV_BYTES = 5 * 1024 * 1024;
-
-export function isTerminal(stage: AnalysisStage): boolean {
-  return stage === 'COMPLETED' || stage === 'FAILED';
-}

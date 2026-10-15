@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 
 import { AnalysesStore, isWorking } from '../../core/analyses.store';
 import { errorMessage } from '../../core/error-messages';
@@ -19,7 +26,15 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
  */
 @Component({
   selector: 'app-analysis-detail',
-  imports: [AppliedToggle, InlineTitleEdit, KeywordChips, ProgressInline, ScoreBadge, StepIndicator, SuggestionList],
+  imports: [
+    AppliedToggle,
+    InlineTitleEdit,
+    KeywordChips,
+    ProgressInline,
+    ScoreBadge,
+    StepIndicator,
+    SuggestionList,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (detail(); as analysis) {
@@ -37,7 +52,9 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
               />
             } @else {
               <div class="flex min-w-0 items-center gap-2">
-                <h2 class="min-w-0 truncate text-xl font-semibold text-slate-900">{{ analysis.title }}</h2>
+                <h2 class="min-w-0 truncate text-xl font-semibold text-slate-900">
+                  {{ analysis.title }}
+                </h2>
                 <button
                   type="button"
                   class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-indigo-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
@@ -49,15 +66,17 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
                 </button>
               </div>
             }
-            <p class="mt-1 text-xs text-slate-500">Created {{ formatDateTime(analysis.createdAt) }}</p>
+            <p class="mt-1 text-xs text-slate-500">
+              Created {{ formatDateTime(analysis.createdAt) }}
+            </p>
           </div>
 
           <div class="flex flex-col items-end gap-2">
             <span
               class="rounded-full px-2.5 py-1 text-xs font-medium"
-              [class]="statusBadgeClasses(analysis.stage)"
+              [class]="statusBadgeClasses()"
               aria-live="polite"
-              >{{ stageLabel(analysis.stage) }}</span
+              >{{ stageLabel() }}</span
             >
             <app-applied-toggle
               variant="switch"
@@ -70,16 +89,17 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
         </div>
 
         <div class="mt-4">
-          <app-step-indicator
-            [stage]="analysis.stage"
-            [failedStage]="analysis.stage === 'FAILED' ? (analysis.score === null ? 'EVALUATING' : 'REWRITING') : null"
-          />
+          <app-step-indicator [stage]="analysis.stage" [failedStage]="failedStage()" />
         </div>
 
         <!-- Working: calm inline progress. -->
         @if (working()) {
           <div class="mt-5">
-            <app-progress-inline [stage]="analysis.stage" [progress]="analysis.progress" />
+            <app-progress-inline
+              [stage]="analysis.stage"
+              [progress]="analysis.progress"
+              [message]="analysis.stageMessage ?? null"
+            />
           </div>
         }
 
@@ -138,18 +158,26 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
             </div>
 
             @if (analyses.actionError(); as message) {
-              <p role="alert" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ message }}</p>
+              <p role="alert" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                {{ message }}
+              </p>
             }
 
             <button
               type="button"
               class="mt-4 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-              [class]="selectedCount() > 0 ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'border border-slate-300 text-slate-400'"
+              [class]="
+                selectedCount() > 0
+                  ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  : 'border border-slate-300 text-slate-400'
+              "
               [disabled]="selectedCount() === 0"
               (click)="apply(analysis)"
             >
               Apply selected changes
-              <span class="font-normal">· {{ selectedCount() }} of {{ analysis.suggestions.length }} selected</span>
+              <span class="font-normal"
+                >· {{ selectedCount() }} of {{ analysis.suggestions.length }} selected</span
+              >
             </button>
           </section>
         }
@@ -166,7 +194,9 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
                 Download improved CV
               </a>
             } @else {
-              <p class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+              <p
+                class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500"
+              >
                 The improved CV is ready, but the file is no longer available.
               </p>
             }
@@ -174,7 +204,7 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
             @if (analysis.appliedChanges && analysis.appliedChanges.length > 0) {
               <h3 class="mt-6 text-sm font-semibold text-slate-900">Changes applied</h3>
               <ul class="mt-2 flex flex-col gap-2">
-                @for (change of analysis.appliedChanges; track $index) {
+                @for (change of analysis.appliedChanges; track change.section + ':' + $index) {
                   <li class="rounded-xl border border-slate-200 bg-white p-3">
                     <p class="text-sm font-medium text-slate-900">{{ change.section }}</p>
                     @if (change.before) {
@@ -198,7 +228,10 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
               <p class="text-sm font-medium text-red-800">The analysis did not finish</p>
               <p class="mt-1 text-sm text-red-700">
                 {{
-                  errorMessage(analysis.errorCode, 'The analysis could not complete. Try running it again.')
+                  errorMessage(
+                    analysis.errorCode,
+                    'The analysis could not complete. Try running it again.'
+                  )
                 }}
               </p>
               <button
@@ -215,7 +248,9 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
                 <summary class="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
                   Technical details
                 </summary>
-                <p class="mt-2 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600">
+                <p
+                  class="mt-2 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600"
+                >
                   @if (analysis.errorCode) {
                     <span class="font-mono">{{ analysis.errorCode }}</span>
                   }
@@ -249,13 +284,34 @@ export class AnalysisDetail {
   });
 
   protected readonly editing = signal(false);
-  protected readonly selection = signal<ReadonlySet<string>>(new Set());
+  readonly selectedIds = signal<ReadonlySet<string>>(new Set());
 
   private readonly editingId = signal<string | null>(null);
   private readonly lastInitKey = signal('');
 
-  readonly selectedIds = computed(() => this.selection());
-  readonly selectedCount = computed(() => this.selection().size);
+  protected readonly selectedCount = computed(() => this.selectedIds().size);
+
+  /** The stage a FAILED analysis stopped in (docs/API.md §5), for the step indicator. */
+  protected readonly failedStage = computed<AnalysisStage | null>(() => {
+    const analysis = this.detail();
+    if (!analysis || analysis.stage !== 'FAILED') return null;
+    if (analysis.errorCode && FETCH_STAGE_ERROR_CODES.has(analysis.errorCode))
+      return 'FETCHING_POSTING';
+    return analysis.score === null ? 'EVALUATING' : 'REWRITING';
+  });
+
+  protected readonly stageLabel = computed<string>(() => {
+    const stage = this.detail()?.stage;
+    return stage ? (SHORT_STAGE_LABELS[stage] ?? stage) : '';
+  });
+
+  protected readonly statusBadgeClasses = computed<string>(() => {
+    const stage = this.detail()?.stage;
+    if (stage === 'COMPLETED') return 'bg-emerald-50 text-emerald-700';
+    if (stage === 'FAILED') return 'bg-red-50 text-red-700';
+    if (stage === 'AWAITING_REVIEW') return 'bg-indigo-50 text-indigo-700';
+    return 'bg-slate-100 text-slate-600';
+  });
 
   constructor() {
     // Defaults: high and medium priority changes start checked (docs/API.md UI).
@@ -265,7 +321,7 @@ export class AnalysisDetail {
       const key = `${analysis.id}:${analysis.suggestions.length}`;
       if (key === this.lastInitKey()) return;
       this.lastInitKey.set(key);
-      this.selection.set(
+      this.selectedIds.set(
         new Set(analysis.suggestions.filter((s) => s.priority !== 'LOW').map((s) => s.id)),
       );
     });
@@ -296,7 +352,7 @@ export class AnalysisDetail {
   }
 
   toggleSuggestion(id: string): void {
-    this.selection.update((current) => {
+    this.selectedIds.update((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -305,41 +361,41 @@ export class AnalysisDetail {
   }
 
   selectAll(analysis: Detail): void {
-    this.selection.set(new Set(analysis.suggestions.map((s) => s.id)));
+    this.selectedIds.set(new Set(analysis.suggestions.map((s) => s.id)));
   }
 
   selectNone(): void {
-    this.selection.set(new Set());
+    this.selectedIds.set(new Set());
   }
 
   apply(analysis: Detail): void {
-    if (this.selection().size === 0) return;
-    this.analyses.apply(analysis.id, [...this.selection()]);
+    if (this.selectedIds().size === 0) return;
+    this.analyses.apply(analysis.id, [...this.selectedIds()]);
   }
 
   retry(analysis: Detail): void {
-    this.selection.set(new Set());
+    this.selectedIds.set(new Set());
     this.lastInitKey.set('');
     this.analyses.retry(analysis.id);
   }
 
-  protected readonly stageLabel = (stage: Detail['stage']): string =>
-    SHORT_STAGE_LABELS[stage] ?? stage;
-
-  protected statusBadgeClasses(stage: Detail['stage']): string {
-    if (stage === 'COMPLETED') return 'bg-emerald-50 text-emerald-700';
-    if (stage === 'FAILED') return 'bg-red-50 text-red-700';
-    if (stage === 'AWAITING_REVIEW') return 'bg-indigo-50 text-indigo-700';
-    return 'bg-slate-100 text-slate-600';
-  }
-
-  protected formatDateTime = formatDateTime;
-  protected errorMessage = errorMessage;
+  protected readonly formatDateTime = formatDateTime;
+  protected readonly errorMessage = errorMessage;
 }
+
+/** Error codes whose failure happened in the FETCHING_POSTING stage (docs/API.md §5). */
+const FETCH_STAGE_ERROR_CODES = new Set([
+  'URL_INVALID',
+  'URL_BLOCKED',
+  'FETCH_FAILED',
+  'FETCH_NOT_HTML',
+  'POSTING_NOT_FOUND',
+]);
 
 /** Short labels for the detail header badge. */
 const SHORT_STAGE_LABELS: Record<AnalysisStage, string> = {
   QUEUED: 'Queued',
+  FETCHING_POSTING: 'Fetching posting',
   EVALUATING: 'Checking',
   AWAITING_REVIEW: 'Needs review',
   REWRITING: 'Applying changes',

@@ -15,7 +15,9 @@ import { CvContextStore } from '../../core/cv-context.store';
         class="flex max-w-64 min-w-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5"
       >
         <span aria-hidden="true" class="text-slate-400">⧉</span>
-        <span class="truncate text-sm text-slate-800" [title]="file.fileName">{{ file.fileName }}</span>
+        <span class="truncate text-sm text-slate-800" [title]="file.fileName">{{
+          file.fileName
+        }}</span>
         <button
           type="button"
           class="shrink-0 rounded-md px-1.5 py-0.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
@@ -44,8 +46,8 @@ export class CvChip {
   }
 
   onFilePicked(event: Event): void {
-    const file = (event.target as HTMLInputElement).files?.[0];
     const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
     if (file) this.cv.upload(file);
     input.value = '';
   }

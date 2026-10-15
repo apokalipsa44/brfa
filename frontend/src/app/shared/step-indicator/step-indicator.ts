@@ -71,6 +71,7 @@ export class StepIndicator {
     let progress: number;
     switch (effective) {
       case 'QUEUED':
+      case 'FETCHING_POSTING':
       case 'EVALUATING':
         progress = 0;
         break;

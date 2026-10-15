@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import { STAGE_LABELS, isWorking } from '../../core/analyses.store';
 import { relativeTime } from '../../core/format';
@@ -40,9 +40,11 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
                 aria-hidden="true"
                 class="flex h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"
               ></span>
-              <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-900" [title]="title()">{{
-                title()
-              }}</span>
+              <span
+                class="min-w-0 flex-1 truncate text-sm font-medium text-slate-900"
+                [title]="title()"
+                >{{ title() }}</span
+              >
               <span class="shrink-0 text-xs text-indigo-600">{{ stageLabel() }}</span>
             </div>
           } @else {
@@ -54,7 +56,10 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
                 summary().shortDescription
               }}</span>
             }
-            <span class="mt-2.5 flex min-w-0 items-center gap-1.5 text-xs" [class]="statusClasses()">
+            <span
+              class="mt-2.5 flex min-w-0 items-center gap-1.5 text-xs"
+              [class]="statusClasses()"
+            >
               @if (statusGlyph()) {
                 <span aria-hidden="true">{{ statusGlyph() }}</span>
               }
@@ -150,42 +155,42 @@ export class AnalysisCard {
   protected readonly menuOpen = signal(false);
   protected readonly editing = signal(false);
 
-  protected readonly compact = () => isWorking(this.summary().stage);
+  protected readonly compact = computed(() => isWorking(this.summary().stage));
 
   /** The applied marker only makes sense on a review or a finished analysis. */
-  protected readonly showApplied = () => {
+  protected readonly showApplied = computed(() => {
     const stage = this.summary().stage;
     return stage === 'AWAITING_REVIEW' || stage === 'COMPLETED';
-  };
+  });
 
   /** Falls back to a placeholder until evaluation generates a title. */
-  protected title(): string {
-    return this.summary().title || 'Untitled analysis';
-  }
+  protected readonly title = computed(() => this.summary().title || 'Untitled analysis');
 
-  protected readonly stageLabel = () => STAGE_LABELS[this.summary().stage] ?? this.summary().stage;
+  protected readonly stageLabel = computed(
+    () => STAGE_LABELS[this.summary().stage] ?? this.summary().stage,
+  );
 
-  protected statusClasses(): string {
+  protected readonly statusClasses = computed(() => {
     const stage = this.summary().stage;
     if (stage === 'FAILED') return 'text-red-700';
     if (stage === 'CANCELLED') return 'text-slate-500';
     if (stage === 'AWAITING_REVIEW') return 'text-indigo-700';
     if (stage === 'COMPLETED') return 'text-emerald-700';
     return 'text-indigo-600';
-  }
+  });
 
-  protected statusGlyph(): string {
+  protected readonly statusGlyph = computed(() => {
     const stage = this.summary().stage;
     if (stage === 'COMPLETED') return '✓';
     if (stage === 'FAILED') return '!';
     if (stage === 'CANCELLED') return '×';
     return '';
-  }
+  });
 
-  protected scoreLabel(): string | null {
+  protected readonly scoreLabel = computed(() => {
     const score = this.summary().score;
     return score === null ? null : `Match score ${score} out of 100`;
-  }
+  });
 
   protected startRename(): void {
     this.menuOpen.set(false);
@@ -197,5 +202,5 @@ export class AnalysisCard {
     if (title !== this.summary().title) this.renamed.emit({ id: this.summary().id, title });
   }
 
-  protected formatDate = relativeTime;
+  protected readonly formatDate = relativeTime;
 }

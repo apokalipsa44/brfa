@@ -16,8 +16,8 @@ import { MAX_JOB_POSTING_CHARS } from '../../core/models';
     <form class="mx-auto max-w-2xl" (submit)="onSubmit($event)">
       <h2 class="text-lg font-semibold text-slate-900">New analysis</h2>
       <p class="mt-1 text-sm text-slate-500">
-        Paste a job posting. Your CV is matched against it and the changes are suggested before anything
-        is rewritten.
+        Paste a job posting. Your CV is matched against it and the changes are suggested before
+        anything is rewritten.
       </p>
 
       <label for="posting" class="mt-5 block text-sm font-medium text-slate-700">Job posting</label>
@@ -42,7 +42,9 @@ import { MAX_JOB_POSTING_CHARS } from '../../core/models';
       </div>
 
       @if (analyses.actionError(); as message) {
-        <p role="alert" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ message }}</p>
+        <p role="alert" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {{ message }}
+        </p>
       }
 
       <button
@@ -62,7 +64,8 @@ export class NewAnalysisForm {
   protected readonly maxChars = MAX_JOB_POSTING_CHARS;
 
   private readonly posting = signal('');
-  private readonly length = signal(0);
+
+  protected readonly length = computed(() => this.posting().length);
 
   /** Single source for the disabled state and the one-line helper text. */
   protected readonly hint = computed<string | null>(() => {
@@ -78,9 +81,7 @@ export class NewAnalysisForm {
   );
 
   protected onInput(event: Event): void {
-    const value = (event.target as HTMLTextAreaElement).value;
-    this.posting.set(value);
-    this.length.set(value.length);
+    this.posting.set((event.target as HTMLTextAreaElement).value);
   }
 
   protected onSubmit(event: Event): void {
@@ -89,6 +90,5 @@ export class NewAnalysisForm {
     if (!text || text.length > this.maxChars) return;
     this.analyses.create(text);
     this.posting.set('');
-    this.length.set(0);
   }
 }

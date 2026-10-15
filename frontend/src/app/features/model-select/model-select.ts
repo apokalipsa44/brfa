@@ -12,7 +12,11 @@ import { CvContextStore } from '../../core/cv-context.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex items-center gap-2">
-      <span aria-hidden="true" class="flex h-2.5 w-2.5 shrink-0 rounded-full" [class]="dotTone()"></span>
+      <span
+        aria-hidden="true"
+        class="flex h-2.5 w-2.5 shrink-0 rounded-full"
+        [class]="dotTone()"
+      ></span>
       <label for="model" class="sr-only">Active model</label>
       <select
         id="model"

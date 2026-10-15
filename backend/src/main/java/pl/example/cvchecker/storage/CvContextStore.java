@@ -46,14 +46,6 @@ public class CvContextStore {
         return Optional.ofNullable(current);
     }
 
-    /** The current CV when its id matches — an unknown or already-replaced id is treated as missing. */
-    public synchronized Optional<CvContext> find(String id) {
-        if (current == null || !current.id().equals(id)) {
-            return Optional.empty();
-        }
-        return Optional.of(current);
-    }
-
     /** Best-effort deletion: the temp dir is wiped with the process anyway. */
     private static void deleteQuietly(CvContext file) {
         if (file == null) {

@@ -13,8 +13,16 @@ const MESSAGES: Record<string, string> = {
   MODEL_BLANK: 'Choose a model.',
   MODEL_NOT_FOUND: 'That model is not available in LM Studio.',
   LLM_UNREACHABLE: 'LM Studio is not reachable. Start the server and try again.',
+  POSTING_REQUIRED: 'Paste a job posting.',
   MISSING_JOB_DESCRIPTION: 'Paste a job posting.',
   JOB_DESCRIPTION_TOO_LONG: 'The job posting is too long.',
+  POSTING_SOURCE_CONFLICT: 'Provide either a posting or a link, not both.',
+  URL_INVALID: 'That link is not a valid public URL. Paste the posting text instead.',
+  URL_BLOCKED: 'That address is not publicly reachable. Paste the posting text instead.',
+  FETCH_FAILED: 'The page could not be fetched. Paste the posting text instead.',
+  FETCH_NOT_HTML: 'That link does not point to a web page. Paste the posting text instead.',
+  POSTING_NOT_FOUND:
+    'No job posting could be found on that page (it may need a login). Paste the posting text instead.',
   ANALYSIS_NOT_FOUND: 'This analysis no longer exists.',
   TITLE_BLANK: 'Enter a title.',
   NO_UPDATES: 'Nothing to update.',
@@ -23,6 +31,8 @@ const MESSAGES: Record<string, string> = {
   NOT_AWAITING_REVIEW: 'This analysis is no longer waiting for review.',
   NO_SUGGESTIONS_APPROVED: 'Select at least one change to apply.',
   NOT_FAILED: 'This analysis is not in a failed state.',
+  NOT_RETRYABLE: 'This analysis can only be retried after a failure or cancellation.',
+  NOT_CANCELLABLE: 'This analysis is no longer running.',
   NOT_READY: 'The improved CV is not ready yet.',
   RESULT_NOT_FOUND: 'The improved CV file is no longer available.',
   LLM_INVALID_OUTPUT: 'The model returned an invalid response. Try again.',
@@ -35,22 +45,19 @@ const MESSAGES: Record<string, string> = {
   REQUEST_REJECTED: 'The request was rejected. Try again.',
 };
 
-export function errorMessage(code?: string | null, fallback = 'Something went wrong. Try again.'): string {
+export function errorMessage(
+  code?: string | null,
+  fallback = 'Something went wrong. Try again.',
+): string {
   if (code && MESSAGES[code]) return MESSAGES[code];
   return fallback;
 }
 
-/** The stable machine code of a ProblemDetail response, or null (docs/API.md §1.2). */
-export function errorCode(err: unknown): string | null {
-  if (err instanceof HttpErrorResponse) {
-    const body = err.error as { code?: unknown } | null;
-    if (body && typeof body.code === 'string') return body.code;
-  }
-  return null;
-}
-
 /** Maps any HTTP failure to friendly text, preferring the backend's ProblemDetail (docs/API.md §1.2). */
-export function problemMessage(err: unknown, fallback = 'Something went wrong. Try again.'): string {
+export function problemMessage(
+  err: unknown,
+  fallback = 'Something went wrong. Try again.',
+): string {
   if (err instanceof HttpErrorResponse) {
     const body = err.error as { code?: unknown; detail?: unknown } | null;
     if (body && typeof body.code === 'string') return errorMessage(body.code, fallback);

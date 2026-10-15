@@ -34,9 +34,6 @@ export class CvContextStore {
   readonly selecting = this._selecting.asReadonly();
 
   readonly hasCv = computed(() => this._cv() !== null);
-  readonly activeModel = computed(
-    () => this._models().find((m) => m.id === this._activeModelId()) ?? null,
-  );
 
   constructor() {
     this.loadCv();
