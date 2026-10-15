@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * demands Kubernetes — K8s must appear in missing keywords but never in the rewritten document.
  * Slow (minutes), so it only runs with {@code LM_STUDIO_LIVE=1} and {@code LLM_MODEL} set.
  */
-@SpringBootTest
+@SpringBootTest(properties = "cvchecker.persistence=memory")
 @EnabledIfEnvironmentVariable(named = "LM_STUDIO_LIVE", matches = "1")
 class LmStudioRewriteLiveTest {
 

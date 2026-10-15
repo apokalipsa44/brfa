@@ -123,6 +123,47 @@ describe('AnalysesStore', () => {
     expect(store.analyses()[0].title).toBe('My custom title');
   });
 
+  it('updates the description through PATCH, optimistically', () => {
+    seedAnalyses(http, [summary('a1', { shortDescription: 'Backend role.' })]);
+
+    store.updateDescription('a1', 'My own summary.');
+    expect(store.analyses()[0].shortDescription).toBe('My own summary.');
+
+    const request = http.expectOne('/api/analyses/a1');
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ description: 'My own summary.' });
+    request.flush(summary('a1', { shortDescription: 'My own summary.' }));
+
+    expect(store.analyses()[0].shortDescription).toBe('My own summary.');
+  });
+
+  it('rolls back an optimistic description change when the save fails', () => {
+    seedAnalyses(http, [summary('a1', { shortDescription: 'Backend role.' })]);
+
+    store.updateDescription('a1', 'x'.repeat(201));
+    expect(store.analyses()[0].shortDescription).toBe('x'.repeat(201));
+    http
+      .expectOne('/api/analyses/a1')
+      .flush(
+        { code: 'DESCRIPTION_TOO_LONG', detail: 'too long' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+
+    expect(store.analyses()[0].shortDescription).toBe('Backend role.');
+    expect(store.actionError()).toContain('200');
+  });
+
+  it('clears the description override by sending a blank value', () => {
+    seedAnalyses(http, [summary('a1', { shortDescription: 'Mine.' })]);
+
+    store.updateDescription('a1', '   ');
+    const request = http.expectOne('/api/analyses/a1');
+    expect(request.request.body).toEqual({ description: '' });
+    request.flush(summary('a1', { shortDescription: 'From the model.' }));
+
+    expect(store.analyses()[0].shortDescription).toBe('From the model.');
+  });
+
   it('marks applied optimistically with today and confirms from the PATCH response', () => {
     seedAnalyses(http, [summary('a1', { appliedAt: null })]);
 

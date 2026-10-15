@@ -5,8 +5,9 @@ import java.util.Optional;
 
 /**
  * Analysis storage (docs/API.md §8). Analyses are registered and queried only through this
- * interface; the implementation is pure in-memory (empty after a restart) but a persistent store
- * could be swapped in behind it without touching callers.
+ * interface. The default implementation is SQLite-backed ({@code SqliteAnalysisRegistry}) so analyses
+ * survive restarts; {@code cvchecker.persistence=memory} selects the volatile in-memory variant used
+ * by tests.
  */
 public interface AnalysisRegistry {
 

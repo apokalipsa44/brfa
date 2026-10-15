@@ -241,6 +241,41 @@ class AnalysisControllerTest {
     }
 
     @Test
+    void descriptionReturnsUpdatedSummary() throws Exception {
+        Analysis analysis = awaitingReview();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"My own role summary.\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shortDescription").value("My own role summary."));
+
+        assertThat(analysis.shortDescription()).isEqualTo("My own role summary.");
+    }
+
+    @Test
+    void blankDescriptionClearsTheOverride() throws Exception {
+        Analysis analysis = awaitingReview();
+        analysis.setDescription("Mine.");
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shortDescription").value("Payment APIs in Java on a small team."));
+    }
+
+    @Test
+    void tooLongDescriptionReturns400() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(patch("/api/analyses/a1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"" + "x".repeat(201) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("DESCRIPTION_TOO_LONG"));
+    }
+
+    @Test
     void appliedTrueSetsTodayWhenUnset() throws Exception {
         Analysis analysis = awaitingReview();
         when(registry.find("a1")).thenReturn(Optional.of(analysis));

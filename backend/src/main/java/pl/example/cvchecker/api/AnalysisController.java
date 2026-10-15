@@ -52,6 +52,9 @@ public class AnalysisController {
 
     static final int MAX_DESCRIPTION_CHARS = 20_000;
 
+    /** Hard cap for the user-editable role description (docs/API.md §4/§6.4). */
+    static final int MAX_USER_DESCRIPTION_CHARS = 200;
+
     private final AnalysisRegistry registry;
     private final AnalysisPipeline pipeline;
     private final AnalysisRuns runs;
@@ -111,7 +114,7 @@ public class AnalysisController {
         return ResponseEntity.accepted().body(created);
     }
 
-    /** All analyses, newest first (docs/API.md §4); the registry is in-memory, so empty after a restart. */
+    /** All analyses, newest first (docs/API.md §4); persisted, so they survive a restart. */
     @GetMapping
     public List<AnalysisSummary> list() {
         return registry.findAll().stream()
@@ -141,22 +144,29 @@ public class AnalysisController {
     }
 
     /**
-     * Partial update (docs/API.md §4): the user title and the "applied to job" marker. Every field is
-     * optional but at least one must be present. User values are never auto-overwritten (§6.2), and
-     * the change broadcasts an {@code analysis.updated} event so other tabs update live.
+     * Partial update (docs/API.md §4): the user title, the user description and the "applied to job"
+     * marker. Every field is optional but at least one must be present. User values are never
+     * auto-overwritten (§6.2), and the change broadcasts an {@code analysis.updated} event so other
+     * tabs update live.
      */
     @PatchMapping("/{id}")
     public AnalysisSummary update(@PathVariable String id, @RequestBody(required = false) UpdateAnalysisRequest body) {
         boolean hasTitle = body != null && body.title() != null;
+        boolean hasDescription = body != null && body.description() != null;
         boolean hasApplied = body != null && body.applied() != null;
         boolean hasAppliedAt = body != null && body.appliedAt() != null;
-        if (!hasTitle && !hasApplied && !hasAppliedAt) {
+        if (!hasTitle && !hasDescription && !hasApplied && !hasAppliedAt) {
             throw new ApiException(422, "NO_UPDATES", "No updates",
-                    "Provide at least one of 'title', 'applied' or 'appliedAt'.");
+                    "Provide at least one of 'title', 'description', 'applied' or 'appliedAt'.");
         }
         if (hasTitle && body.title().isBlank()) {
             throw new ApiException(400, "TITLE_BLANK", "Title blank",
                     "Provide a non-blank title for the analysis.");
+        }
+        if (hasDescription && body.description().strip().length() > MAX_USER_DESCRIPTION_CHARS) {
+            throw new ApiException(400, "DESCRIPTION_TOO_LONG", "Description too long",
+                    "The description has " + body.description().strip().length()
+                            + " characters; the limit is " + MAX_USER_DESCRIPTION_CHARS + ".");
         }
         Analysis analysis = require(id);
         LocalDate appliedDate = hasAppliedAt ? parseAppliedAt(body.appliedAt()) : null;
@@ -165,6 +175,10 @@ public class AnalysisController {
                     "The applied date cannot be in the future.");
         }
         if (hasTitle) analysis.rename(body.title());
+        if (hasDescription) {
+            String description = body.description().strip();
+            analysis.setDescription(description.isEmpty() ? null : description); // blank clears the override
+        }
         if (hasAppliedAt) {
             analysis.setApplied(appliedDate); // appliedAt wins over applied and implies applied
         } else if (hasApplied) {
@@ -294,6 +308,6 @@ public class AnalysisController {
 
     private Analysis require(String id) {
         return registry.find(id).orElseThrow(() -> new ApiException(404, "ANALYSIS_NOT_FOUND",
-                "Analysis not found", "No analysis with this id (the registry is in-memory; a restart clears it)."));
+                "Analysis not found", "No analysis with this id."));
     }
 }

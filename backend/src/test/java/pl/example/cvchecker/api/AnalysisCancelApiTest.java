@@ -38,7 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(properties = {
         "cvchecker.pipeline.mode=simulated",
-        "cvchecker.pipeline.stage-delay=1500ms"
+        "cvchecker.pipeline.stage-delay=1500ms",
+        "cvchecker.persistence=memory"
 })
 @AutoConfigureMockMvc
 class AnalysisCancelApiTest {

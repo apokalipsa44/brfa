@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * model over HTTP/1.1. Slow (minutes on a 27B model), so it only runs with
  * {@code LM_STUDIO_LIVE=1} and {@code LLM_MODEL} set, never in the default suite.
  */
-@SpringBootTest
+@SpringBootTest(properties = "cvchecker.persistence=memory")
 @EnabledIfEnvironmentVariable(named = "LM_STUDIO_LIVE", matches = "1")
 class LmStudioAnalysisLiveTest {
 

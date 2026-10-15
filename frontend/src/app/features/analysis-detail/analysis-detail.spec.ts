@@ -177,6 +177,46 @@ describe('AnalysisDetail review', () => {
     http.expectNone('/api/analyses/a1');
   });
 
+  it('edits the role description inline and saves through PATCH', () => {
+    selectAnalysis();
+
+    const edit = fixture.nativeElement.querySelector(
+      'button[aria-label="Edit role description"]',
+    ) as HTMLButtonElement;
+    expect(edit).toBeTruthy();
+    edit.click();
+    fixture.detectChanges();
+
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    expect(textarea).toBeTruthy();
+    textarea.value = 'My own summary.';
+    fixture.detectChanges();
+
+    buttonFor('Save').click();
+    fixture.detectChanges();
+
+    const request = http.expectOne('/api/analyses/a1');
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ description: 'My own summary.' });
+    request.flush(detailResponse({ shortDescription: 'My own summary.' }));
+  });
+
+  it('cancels the description edit without a request', () => {
+    selectAnalysis();
+
+    const edit = fixture.nativeElement.querySelector(
+      'button[aria-label="Edit role description"]',
+    ) as HTMLButtonElement;
+    edit.click();
+    fixture.detectChanges();
+
+    buttonFor('Cancel').click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('textarea')).toBeNull();
+    http.expectNone('/api/analyses/a1');
+  });
+
   it('toggles the applied marker from the header switch', () => {
     selectAnalysis();
 

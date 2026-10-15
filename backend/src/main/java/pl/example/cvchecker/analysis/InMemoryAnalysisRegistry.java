@@ -5,15 +5,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 /**
  * Pure in-memory analysis registry (docs/API.md §8): a {@link ConcurrentHashMap} with no persistence
- * — a backend restart empties it. Every analysis change (and its removal) is published as a Spring
- * application event; the global SSE stream (M4) listens to them and fans them out.
+ * — a backend restart empties it. Selected only with {@code cvchecker.persistence=memory} (tests);
+ * the default is the SQLite-backed {@code SqliteAnalysisRegistry}. Every analysis change (and its
+ * removal) is published as a Spring application event; the global SSE stream listens and fans out.
  */
 @Component
+@ConditionalOnProperty(name = "cvchecker.persistence", havingValue = "memory")
 public class InMemoryAnalysisRegistry implements AnalysisRegistry {
 
     private final Map<String, Analysis> analyses = new ConcurrentHashMap<>();

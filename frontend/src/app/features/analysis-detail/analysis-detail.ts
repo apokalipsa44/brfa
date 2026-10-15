@@ -88,6 +88,56 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
           </div>
         </div>
 
+        <!-- Role summary: inline-editable description (docs/API.md §4). -->
+        <div class="mt-3">
+          @if (editingDescription() && editingDescriptionId() === analysis.id) {
+            <textarea
+              #descriptionField
+              rows="2"
+              maxlength="200"
+              class="w-full resize-none rounded-lg border border-indigo-500 bg-white px-3 py-2 text-sm text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+              aria-label="Edit role description"
+              [value]="analysis.shortDescription ?? ''"
+              (keydown.escape)="cancelDescriptionEdit()"
+            ></textarea>
+            <div class="mt-1 flex gap-2 text-xs">
+              <button
+                type="button"
+                class="rounded-md bg-indigo-600 px-2 py-1 font-medium text-white hover:bg-indigo-700"
+                (click)="saveDescription(analysis, descriptionField)"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                class="rounded-md px-2 py-1 font-medium text-slate-500 hover:bg-slate-100"
+                (click)="cancelDescriptionEdit()"
+              >
+                Cancel
+              </button>
+            </div>
+          } @else {
+            <div class="flex items-start gap-2">
+              @if (analysis.shortDescription) {
+                <p class="min-w-0 flex-1 text-sm text-slate-600">
+                  {{ analysis.shortDescription }}
+                </p>
+              } @else {
+                <p class="min-w-0 flex-1 text-sm text-slate-400 italic">No description yet.</p>
+              }
+              <button
+                type="button"
+                class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-indigo-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+                aria-label="Edit role description"
+                title="Edit description"
+                (click)="startDescriptionEdit(analysis)"
+              >
+                <span aria-hidden="true">✎</span>
+              </button>
+            </div>
+          }
+        </div>
+
         <div class="mt-4">
           <app-step-indicator [stage]="analysis.stage" [failedStage]="failedStage()" />
         </div>
@@ -284,9 +334,11 @@ export class AnalysisDetail {
   });
 
   protected readonly editing = signal(false);
+  protected readonly editingDescription = signal(false);
   readonly selectedIds = signal<ReadonlySet<string>>(new Set());
 
   private readonly editingId = signal<string | null>(null);
+  private readonly editingDescriptionId = signal<string | null>(null);
   private readonly lastInitKey = signal('');
 
   protected readonly selectedCount = computed(() => this.selectedIds().size);
@@ -344,6 +396,28 @@ export class AnalysisDetail {
   cancelEdit(): void {
     this.editing.set(false);
     this.editingId.set(null);
+  }
+
+  startDescriptionEdit(analysis: Detail): void {
+    if (this.editingDescription()) return;
+    this.editingDescription.set(true);
+    // Keep the reference so a stale closure cannot edit a different analysis.
+    this.editingDescriptionId.set(analysis.id);
+  }
+
+  saveDescription(analysis: Detail, field: HTMLTextAreaElement): void {
+    const value = field.value.trim();
+    this.editingDescription.set(false);
+    if (this.editingDescriptionId() !== analysis.id) return;
+    this.editingDescriptionId.set(null);
+    if (value !== (analysis.shortDescription ?? '').trim()) {
+      this.analyses.updateDescription(analysis.id, value);
+    }
+  }
+
+  cancelDescriptionEdit(): void {
+    this.editingDescription.set(false);
+    this.editingDescriptionId.set(null);
   }
 
   /** Requested applied state, or an explicit ISO date when the user picked one. */

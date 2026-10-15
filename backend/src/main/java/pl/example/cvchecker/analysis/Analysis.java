@@ -46,6 +46,7 @@ public class Analysis {
     private volatile Instant updatedAt;
     private volatile String title;
     private volatile boolean userEditedTitle;
+    private volatile String userDescription;
     private volatile LocalDate appliedAt;
     private volatile Integer score;
     private volatile Evaluation evaluation;
@@ -95,6 +96,46 @@ public class Analysis {
         this.modelId = modelId;
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
+    }
+
+    /** Rebuilds an analysis from its persisted snapshot (docs/API.md §8). */
+    public static Analysis fromState(AnalysisState state) {
+        Analysis analysis = new Analysis(state.id(), state.cvFileName(), state.cvText(), state.sourceUrl(),
+                state.postingText(), state.modelId(), state.createdAt());
+        analysis.updatedAt = state.updatedAt();
+        analysis.stage = state.stage();
+        analysis.progress = state.progress();
+        analysis.title = state.title();
+        analysis.userEditedTitle = state.userEditedTitle();
+        analysis.userDescription = state.userDescription();
+        analysis.appliedAt = state.appliedAt();
+        analysis.score = state.score();
+        analysis.evaluation = state.evaluation();
+        analysis.suggestions = state.suggestions() == null ? List.of() : List.copyOf(state.suggestions());
+        analysis.approvedSuggestionIds = state.approvedSuggestionIds();
+        analysis.appliedChanges = state.appliedChanges();
+        analysis.rewrittenDocument = state.rewrittenDocument();
+        analysis.resultFile = state.resultFile() == null ? null : Path.of(state.resultFile());
+        analysis.errorCode = state.errorCode();
+        analysis.errorMessage = state.errorMessage();
+        analysis.failedStage = state.failedStage();
+        analysis.interruptedStage = state.interruptedStage();
+        analysis.attemptId = state.attemptId();
+        analysis.postingSource = state.postingSource();
+        analysis.postingTruncated = state.postingTruncated();
+        analysis.postingEmployer = state.postingEmployer();
+        analysis.postingPosition = state.postingPosition();
+        return analysis;
+    }
+
+    /** Snapshots every persistent field for storage (docs/API.md §8). */
+    public AnalysisState toState() {
+        return new AnalysisState(id, cvFileName, cvText, sourceUrl, modelId, createdAt, updatedAt, stage,
+                progress, title, userEditedTitle, userDescription, appliedAt, score, evaluation,
+                suggestions, approvedSuggestionIds, appliedChanges, rewrittenDocument,
+                resultFile == null ? null : resultFile.toString(), errorCode, errorMessage, failedStage,
+                interruptedStage, attemptId, postingText, postingSource, postingTruncated,
+                postingEmployer, postingPosition);
     }
 
     void setChangeListener(Runnable changeListener) {
@@ -323,6 +364,19 @@ public class Analysis {
     }
 
     /**
+     * Sets the user description override (PATCH {@code description}, docs/API.md §4). A null value
+     * clears the override, so {@link #shortDescription()} falls back to the evaluation's value; a
+     * set value is never overwritten by a re-evaluation.
+     */
+    public void setDescription(String description) {
+        synchronized (eventLock) {
+            this.userDescription = description;
+            this.updatedAt = Instant.now();
+        }
+        notifyChanged();
+    }
+
+    /**
      * Marks the analysis as applied with today's date, keeping an existing date (PATCH
      * {@code applied:true}, docs/API.md §4). User-set: pipeline runs never change it.
      */
@@ -357,10 +411,19 @@ public class Analysis {
                 interruptedStage, stageMessage, appliedAt, createdAt, updatedAt, errorCode, errorMessage);
     }
 
-    /** The evaluation's capped role description, or null before evaluation / when the model gave none. */
+    /**
+     * The user's description when they edited one, otherwise the evaluation's capped role
+     * description; null before evaluation / when neither is set (docs/API.md §4/§6.4).
+     */
     public String shortDescription() {
+        if (userDescription != null) return userDescription;
         Evaluation current = evaluation;
         return current == null ? null : current.shortDescription();
+    }
+
+    /** The user description override, or null when the evaluation's value is shown (§4). */
+    public String userDescription() {
+        return userDescription;
     }
 
     /** Auto-generated "Employer · Position" once evaluation finishes, otherwise the date fallback. */

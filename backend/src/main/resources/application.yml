@@ -11,6 +11,11 @@ spring:
     multipart:
       max-file-size: 5MB
       max-request-size: 6MB
+  datasource:
+    # analyses are persisted in SQLite (docs/API.md §8); the file is gitignored and configurable
+    url: jdbc:sqlite:${CV_DB_PATH:./data/cvchecker.db}
+    hikari:
+      maximum-pool-size: 1   # SQLite has a single writer; one connection avoids SQLITE_BUSY
   ai:
     openai:
       api-key: lm-studio   # any non-empty string; LM Studio ignores it (plan §6.3)
@@ -26,6 +31,7 @@ management:
     web:
       base-path: /api/actuator   # keeps every backend URL under the single /api prefix (plan §6.1)
 cvchecker:
+  persistence: sqlite   # sqlite = analyses survive restarts (docs/API.md §8); memory = tests only
   llm:
     read-timeout: 10m   # a local model may answer over minutes (plan §6.3)
   lmstudio:

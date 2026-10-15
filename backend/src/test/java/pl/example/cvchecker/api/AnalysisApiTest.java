@@ -42,7 +42,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(properties = {
         "cvchecker.pipeline.mode=simulated",
-        "cvchecker.pipeline.stage-delay=100ms"
+        "cvchecker.pipeline.stage-delay=100ms",
+        "cvchecker.persistence=memory"
 })
 @AutoConfigureMockMvc
 @RecordApplicationEvents

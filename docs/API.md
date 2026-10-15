@@ -194,7 +194,8 @@ Analysis summary (list entry, `analysis.updated` payload, PATCH/POST response):
 - `score` — the 0-100 match score once evaluation is done, otherwise `null`.
 - `shortDescription` — one or two sentences (capped at 200 characters) describing what the role is
   about, produced by the same evaluation call (see §6.4). `null` until evaluation is done and for
-  analyses created before the field existed.
+  analyses created before the field existed. A user edit (PATCH `description`, §4) replaces it and is
+  never overwritten by a re-evaluation.
 - `appliedAt` — the local date (`"2026-10-14"`) the user applied to the job, or `null` when not
   applied: *applied means `appliedAt != null`*. User-set via `PATCH`; the pipeline never changes it.
 - `attemptId` — run counter, starts at 1, +1 per started run (see §1.1).
@@ -323,17 +324,21 @@ An `analysis.updated` event is broadcast for the transition.
 - **200**: the analysis detail above.
 - **404** `ANALYSIS_NOT_FOUND` — unknown id (the registry is in-memory; a backend restart clears it).
 
-### `PATCH /api/analyses/{id}` — update title / applied to job
+### `PATCH /api/analyses/{id}` — update title / description / applied to job
 
 Partial update; every field is optional, at least one must be present. Allowed in **any** stage.
 A success broadcasts an `analysis.updated` event, so other tabs and the card update live. User
-values (`title`, `appliedAt`) are never overwritten by pipeline updates (retry, re-evaluation, stage
-transitions keep them).
+values (`title`, `description`, `appliedAt`) are never overwritten by pipeline updates (retry,
+re-evaluation, stage transitions keep them).
 
 Body (each field optional; examples):
 
 ```json
 { "title": "Latest posting — Acme" }
+```
+
+```json
+{ "description": "Payments platform role on a four-person Java team." }
 ```
 
 ```json
@@ -346,6 +351,10 @@ Body (each field optional; examples):
 
 - `title` — sets the user title (existing behaviour); marked as user-edited and never
   auto-overwritten.
+- `description` — sets the user description (the role summary shown on the card and detail). The
+  value is trimmed and capped at 200 characters; an empty/blank value **clears** the user override,
+  so the field falls back to the evaluation's `shortDescription` (§6.4). Marked as user-edited and
+  never overwritten by a re-evaluation.
 - `applied` (`true` | `false`) — `true` sets `appliedAt` to **today** when it is not set yet and
   keeps the existing date when already set; `false` clears `appliedAt`.
 - `appliedAt` — ISO date (`"2026-10-14"`) or ISO date-time; sets the date explicitly and implies
@@ -354,7 +363,9 @@ Body (each field optional; examples):
 
 - **200**: the updated summary.
 - **400** `TITLE_BLANK` — a `title` field was sent but is blank/whitespace.
-- **422** `NO_UPDATES` — empty body or none of `title` / `applied` / `appliedAt` present.
+- **400** `DESCRIPTION_TOO_LONG` — a `description` field is longer than 200 characters.
+- **422** `NO_UPDATES` — empty body or none of `title` / `description` / `applied` / `appliedAt`
+  present.
 - **422** `APPLIED_AT_INVALID` — `appliedAt` is not a parseable ISO date or date-time.
 - **422** `APPLIED_AT_FUTURE` — `appliedAt` is after today.
 - **404** `ANALYSIS_NOT_FOUND`.
@@ -421,6 +432,7 @@ suggestions, approved suggestion ids) and going back to the queue.
 | `MODEL_NOT_READY` | 422 | analysis requires a ready model (see §3) |
 | `ANALYSIS_NOT_FOUND` | 404 | unknown analysis id |
 | `TITLE_BLANK` | 400 | `PATCH` with an empty `title` |
+| `DESCRIPTION_TOO_LONG` | 400 | `PATCH` with a `description` over 200 characters |
 | `NO_UPDATES` | 422 | `PATCH` with an empty body or no recognised fields |
 | `APPLIED_AT_INVALID` | 422 | `PATCH` with a malformed `appliedAt` |
 | `APPLIED_AT_FUTURE` | 422 | `PATCH` with an `appliedAt` after today |
@@ -444,6 +456,7 @@ analysis is `FAILED` and retry re-runs the stage):
 | `FETCH_FAILED` | `FETCHING_POSTING` | the page could not be fetched (timeout, network, oversized response) |
 | `FETCH_NOT_HTML` | `FETCHING_POSTING` | the link does not point to a web page |
 | `POSTING_NOT_FOUND` | `FETCHING_POSTING` | no usable job posting found; the site may need a login — paste the text instead |
+| `INTERRUPTED` | any running stage | the backend restarted while the analysis was running; retry resumes the interrupted stage |
 
 ---
 
@@ -538,9 +551,16 @@ Connection / replay semantics:
 ## 8. Operational notes
 
 - `analysisId` = random UUID (unguessable; the only access protection).
-- Analyses live in an **in-memory registry**; the registry is empty after a backend restart.
-  Persistence is deliberately out of scope for this iteration (it would sit behind the registry
-  interface).
+- Analyses are **persisted in SQLite** (one `analyses` table; the whole analysis state is a JSON
+  snapshot alongside `id`/`created_at`/`updated_at`/`stage`/`applied_at` columns). The database file
+  is `CV_DB_PATH` (default `./data/cvchecker.db`); a single-connection pool serialises writes. The
+  API and the pipeline still work on the in-memory registry instance, which write-through persists on
+  every change.
+- **Restart semantics:** a non-terminal analysis (QUEUED, FETCHING_POSTING, EVALUATING, REWRITING,
+  GENERATING_PDF) is restored as `FAILED` with `errorCode = "INTERRUPTED"` and its `failedStage` set
+  to the stage it was in, so **retry resumes it**. `AWAITING_REVIEW`, `COMPLETED`, `FAILED` and
+  `CANCELLED` analyses are restored as they were; a `COMPLETED` analysis whose result PDF was cleaned
+  up serves 404 `RESULT_NOT_FOUND` as before.
 - Temp files: the current CV file and result PDFs live in the temp dir; TTL cleanup
   (`cvchecker.analyses.ttl`, default 24 h) removes terminal analyses and their files. Original file
   bytes are never logged.

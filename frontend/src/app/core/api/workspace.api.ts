@@ -6,6 +6,7 @@ import { AnalysisDetail, AnalysisSummary, CvInfo, ModelState } from '../models';
 /** The optional fields of a PATCH /api/analyses/{id} (docs/API.md §4); at least one is sent. */
 export interface AnalysisPatch {
   title?: string;
+  description?: string;
   applied?: boolean;
   appliedAt?: string;
 }
@@ -57,7 +58,7 @@ export class WorkspaceApi {
     return this.http.post<AnalysisSummary>('/api/analyses', { jobPosting });
   }
 
-  /** Partial update of the user title and/or the applied marker (docs/API.md §4). */
+  /** Partial update of the user title, description and/or the applied marker (docs/API.md §4). */
   updateAnalysis(id: string, patch: AnalysisPatch): Observable<AnalysisSummary> {
     return this.http.patch<AnalysisSummary>(`/api/analyses/${encodeURIComponent(id)}`, patch);
   }

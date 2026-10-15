@@ -81,6 +81,16 @@ export class AnalysesStore {
   }
 
   /**
+   * Sets the user description (docs/API.md §4); a blank value clears the override, so the backend
+   * falls back to the evaluation's description. The change shows immediately and rolls back on error.
+   */
+  updateDescription(id: string, description: string): void {
+    const trimmed = description.trim();
+    const fields: Partial<AnalysisSummary> = trimmed ? { shortDescription: trimmed } : {};
+    this.patch(id, { description: trimmed }, fields);
+  }
+
+  /**
    * Marks or clears the "applied to job" marker (docs/API.md §4). `true` uses today's date (keeping an
    * existing one), `false` clears it, and an ISO date string sets an explicit date.
    */
@@ -98,6 +108,7 @@ export class AnalysesStore {
   private patch(id: string, body: AnalysisPatch, fields: Partial<AnalysisSummary>): void {
     const previous: Partial<AnalysisSummary> = {
       title: this.entryFor(id)?.title,
+      shortDescription: this.entryFor(id)?.shortDescription ?? null,
       appliedAt: this.entryFor(id)?.appliedAt ?? null,
     };
     this._actionError.set(null);
