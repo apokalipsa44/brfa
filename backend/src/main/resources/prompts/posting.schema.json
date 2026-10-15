@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "jobPosting": { "type": "boolean" },
+    "employer": { "type": "string" },
+    "position": { "type": "string" },
+    "text": { "type": "string" }
+  },
+  "required": ["jobPosting", "employer", "position", "text"],
+  "additionalProperties": false
+}

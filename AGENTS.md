@@ -1,42 +1,84 @@
 # AGENTS.md — rules for agents working in this repo
 
-Source of truth: `PLAN.en.md` (scope, architecture, milestones). This file is the short operating manual.
+CV checker: upload a CV PDF + a job posting → a local LLM (LM Studio) evaluates the CV,
+rewrites it, and renders a new ATS PDF. Two independent projects: `backend/` (:8080) and
+`frontend/` (:4200, proxies `/api` → :8080).
 
-## Stack (verified 2026-10-09, see docs/ENVIRONMENT.md)
+Source of truth: `PLAN.en.md` + `docs/API.md` (contract) + `docs/DECISIONS.md` (decision log).
+
+> **PLAN is partly stale.** §6.2's `job`/`pipeline` packages and the §9 milestone table predate
+> the "persistent CV + model context + analysis" redesign (legacy job workspace was removed).
+> Trust the current packages below and `docs/API.md`, not PLAN's package/milestone lists.
+
+## Stack (verified 2026-10-14)
 
 | Layer | Technology |
 |---|---|
-| Frontend | Angular 22.x — standalone components, signals, zoneless, Tailwind CSS (`--style tailwind`) |
-| Backend | Java 21+ (JDK 25 installed), Spring Boot **4.1.1** (Spring Framework 7), Spring MVC |
-| LLM | Spring AI **2.0.1** (`spring-ai-starter-model-openai`) → LM Studio `http://localhost:1234` (OpenAI-compatible) |
-| Push | SSE via `SseEmitter`, virtual threads enabled |
-| PDF in / out | Apache PDFBox 3.x / Thymeleaf + openhtmltopdf, embedded DejaVu Sans font |
+| Frontend | Angular 22.x — standalone, signals, **zoneless** (no zone.js dep), Tailwind 4, Vitest, ESLint |
+| Backend | Java 21 (`java.version`) on JDK 25, Spring Boot **4.1.1**, Spring MVC, virtual threads, Maven `./mvnw` |
+| LLM | Spring AI **2.0.1** (`spring-ai-starter-model-openai`) → LM Studio OpenAI-compatible API |
+| Push | one global SSE stream (`SseEmitter`) |
+| PDF | Apache PDFBox **3.0.8** for extraction **and** rendering (embedded DejaVu Sans for Polish chars) |
 
-Note: Boot 4 renamed the web starter to `spring-boot-starter-webmvc`. Do not "fix" it back.
+Boot 4 renamed the web starter to `spring-boot-starter-webmvc`; test starters are
+`spring-boot-starter-{webmvc,actuator}-test`. Do not "fix" these names.
+
+## Packages (`pl.example.cvchecker`)
+
+`config`, `api`, `analysis`, `sse`, `llm`, `pdf`, `posting`, `storage` — not the PLAN §6.2 list.
 
 ## Commands
 
 ```bash
-# backend (from backend/)
-./mvnw spring-boot:run          # start on :8080
-./mvnw -DskipTests package      # build jar
-LLM_MODEL=... ./mvnw spring-boot:run   # model is env-configured, never hardcoded
+# backend (from backend/); does NOT need LM Studio running
+./mvnw test                      # 2 live tests are skipped unless LM_STUDIO_LIVE=1
+LM_STUDIO_LIVE=1 LLM_MODEL=<id> ./mvnw test   # slow live LM Studio tests (minutes)
+./mvnw test -Dtest=ClassName     # single test/class
+LLM_MODEL=<id> ./mvnw spring-boot:run   # :8080; model is env-configured, never hardcoded
 
 # frontend (from frontend/)
-npm run start                   # dev server on :4200, proxies /api → :8080
-npm run build                   # production build
-ng lint                       # linter must be clean
+npm run start                    # :4200; if taken: npm run start -- --port 4300
+npm run build
+npm run lint                     # eslint must be clean
+npx ng test --watch=false        # Vitest; `ng test` watches by default in a TTY
 ```
+
+Backend SSE/API integration tests set `cvchecker.pipeline.mode=simulated` themselves (no test
+resources dir); `mode=real` in `application.yml` is the PDF+LLM+PDF flow. Live LLM tests are gated
+by `@EnabledIfEnvironmentVariable(LM_STUDIO_LIVE=1)`.
+
+## Configuration gotchas
+
+- `application.yml` lives only in `backend/src/main/resources`.
+- `LLM_BASE_URL` **must end in `/v1`** (Spring AI appends only `/chat/completions`).
+- `LM_STUDIO_BASE_URL` is the native v1 API root and must **not** have `/v1` — different var from the above.
+- `LLM_MODEL` defaults to `unconfigured`; `SPRING_AI_OPENAI_API_KEY` is a placeholder (`lm-studio`); no secrets in repo.
+- Actuator base path is `/api/actuator`, so every backend URL sits under the single `/api` prefix.
+- Prompt templates + strict JSON schemas live in `backend/src/main/resources/prompts/`.
 
 ## Conventions
 
-- Java: records for DTOs, constructor injection only (no `@Autowired` fields), packages per PLAN §6.2 (`config`, `api`, `job`, `sse`, `pipeline`, `pdf`, `llm`, `storage`).
-- Angular: standalone components only, signals as the state source, new control-flow syntax (`@if/@for/@switch`), `inject()`, strict TypeScript, `OnPush`.
-- No secrets in the repo. Configuration via `application.yml` + env vars (`LLM_MODEL`, `LLM_BASE_URL`).
-- CV/posting text is untrusted input (prompt injection): always wrap it in delimiters before sending to the LLM; never log its content.
+- Java: records for DTOs, constructor injection only (no `@Autowired` fields).
+- Angular: standalone components only, signals as state source, `@if/@for/@switch`, `inject()`,
+  `OnPush`. Files are kebab-case **without** a `.component` suffix (e.g. `cv-dropzone.ts`,
+  `analyses.store.ts`); many components use inline `template`. Selector prefix `app`.
+- Root `tsconfig.json` does **not** enable `strict: true` (only `noImplicit*` + Angular `strict*`).
+- Prettier config exists (`.prettierrc`, width 100, single quotes) but there is **no** npm format
+  script — run `npx prettier --write src` if needed.
+- CV/posting text is untrusted input (prompt injection): wrap it in delimiters before sending to the
+  LLM; never log its content.
 - Contract changes go into `docs/API.md` first, then code.
-- Minor decisions: decide yourself and record one line in `docs/DECISIONS.md`. Architectural questions: ask the user.
+- Minor decisions: decide yourself and record one line in `docs/DECISIONS.md`. Architectural
+  questions: ask the user.
+
+## Tooling
+
+- `.mcp.json` registers the Angular CLI MCP server (`npx @angular/cli mcp`).
+- Repo skills live in `.opencode/skills/`: `angular-practices`, `spring-practices`,
+  `codebase-search`. Load the relevant one when editing that stack (requires an opencode restart
+  after adding/changing skills).
 
 ## Milestone rule
 
-Do not start milestone N+1 until milestone N's acceptance criterion (PLAN §9) is met. Commit per milestone with message prefix `M<n>:`.
+Do not start milestone N+1 until milestone N's acceptance criterion is met. Commit per milestone
+with message prefix `M<n>:` (see `git log`).

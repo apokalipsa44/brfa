@@ -31,28 +31,28 @@ class UrlGuardTest {
     @Test
     void rejectsNonHttpSchemes() {
         assertThatThrownBy(() -> guard.validate("ftp://example.com/x"))
-                .isInstanceOf(UrlGuardException.class)
-                .extracting(e -> ((UrlGuardException) e).code())
-                .isEqualTo(UrlGuardException.ErrorCode.URL_INVALID);
-        assertThatThrownBy(() -> guard.validate("file:///etc/passwd")).isInstanceOf(UrlGuardException.class);
-        assertThatThrownBy(() -> guard.validate("javascript:alert(1)")).isInstanceOf(UrlGuardException.class);
+                .isInstanceOf(PostingException.class)
+                .extracting(e -> ((PostingException) e).code())
+                .isEqualTo(PostingException.ErrorCode.URL_INVALID);
+        assertThatThrownBy(() -> guard.validate("file:///etc/passwd")).isInstanceOf(PostingException.class);
+        assertThatThrownBy(() -> guard.validate("javascript:alert(1)")).isInstanceOf(PostingException.class);
     }
 
     @Test
     void rejectsCredentialsRelativeAndBlankUrls() {
         assertThatThrownBy(() -> guard.validate("https://user:secret@example.com/job"))
-                .isInstanceOf(UrlGuardException.class);
-        assertThatThrownBy(() -> guard.validate("/jobs/123")).isInstanceOf(UrlGuardException.class);
-        assertThatThrownBy(() -> guard.validate("")).isInstanceOf(UrlGuardException.class);
-        assertThatThrownBy(() -> guard.validate("   ")).isInstanceOf(UrlGuardException.class);
-        assertThatThrownBy(() -> guard.validate(null)).isInstanceOf(UrlGuardException.class);
+                .isInstanceOf(PostingException.class);
+        assertThatThrownBy(() -> guard.validate("/jobs/123")).isInstanceOf(PostingException.class);
+        assertThatThrownBy(() -> guard.validate("")).isInstanceOf(PostingException.class);
+        assertThatThrownBy(() -> guard.validate("   ")).isInstanceOf(PostingException.class);
+        assertThatThrownBy(() -> guard.validate(null)).isInstanceOf(PostingException.class);
     }
 
     @Test
     void rejectsOverlongUrlsAndMissingHost() {
         assertThatThrownBy(() -> guard.validate("https://example.com/" + "a".repeat(UrlGuard.MAX_URL_LENGTH)))
-                .isInstanceOf(UrlGuardException.class);
-        assertThatThrownBy(() -> guard.validate("https://")).isInstanceOf(UrlGuardException.class);
+                .isInstanceOf(PostingException.class);
+        assertThatThrownBy(() -> guard.validate("https://")).isInstanceOf(PostingException.class);
     }
 
     @Test
@@ -86,9 +86,9 @@ class UrlGuardTest {
     @Test
     void lookupBlocksLoopbackHost() {
         assertThatThrownBy(() -> guard.lookup("localhost"))
-                .isInstanceOf(UrlGuardException.class)
-                .extracting(e -> ((UrlGuardException) e).code())
-                .isEqualTo(UrlGuardException.ErrorCode.URL_BLOCKED);
+                .isInstanceOf(PostingException.class)
+                .extracting(e -> ((PostingException) e).code())
+                .isEqualTo(PostingException.ErrorCode.URL_BLOCKED);
     }
 
     @Test
@@ -96,9 +96,9 @@ class UrlGuardTest {
         UrlGuard rebinding = new UrlGuard(host -> new InetAddress[] { addr("8.8.8.8"), addr("127.0.0.1") });
 
         assertThatThrownBy(() -> rebinding.lookup("rebind.example"))
-                .isInstanceOf(UrlGuardException.class)
-                .extracting(e -> ((UrlGuardException) e).code())
-                .isEqualTo(UrlGuardException.ErrorCode.URL_BLOCKED);
+                .isInstanceOf(PostingException.class)
+                .extracting(e -> ((PostingException) e).code())
+                .isEqualTo(PostingException.ErrorCode.URL_BLOCKED);
     }
 
     @Test

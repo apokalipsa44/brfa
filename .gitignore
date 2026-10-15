@@ -17,3 +17,6 @@ frontend/.angular/
 # Local env overrides
 .env
 *.local.yml
+.playwright-cli/
+test data/
+.opencode/skills/

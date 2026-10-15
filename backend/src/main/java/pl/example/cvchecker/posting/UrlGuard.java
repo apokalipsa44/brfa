@@ -41,7 +41,7 @@ public class UrlGuard {
     /**
      * Validates the shape of a user-supplied link and returns its normalised {@link URI}.
      *
-     * @throws UrlGuardException {@code URL_INVALID} when the URL is not a usable absolute http(s) URL
+     * @throws PostingException {@code URL_INVALID} when the URL is not a usable absolute http(s) URL
      */
     public URI validate(String rawUrl) {
         if (rawUrl == null || rawUrl.isBlank()) {
@@ -79,7 +79,7 @@ public class UrlGuard {
      * Resolves and validates a hostname, returning the addresses to connect to. This is exactly what
      * OkHttp's {@code Dns} needs, so a validated lookup is never followed by an unchecked one.
      *
-     * @throws UrlGuardException  {@code URL_BLOCKED} when any resolved address is not publicly routable
+     * @throws PostingException  {@code URL_BLOCKED} when any resolved address is not publicly routable
      * @throws UnknownHostException when the hostname does not resolve (the caller maps this to FETCH_FAILED)
      */
     public List<InetAddress> lookup(String hostname) throws UnknownHostException {
@@ -89,7 +89,7 @@ public class UrlGuard {
         }
         for (InetAddress address : addresses) {
             if (isBlocked(address)) {
-                throw new UrlGuardException(UrlGuardException.ErrorCode.URL_BLOCKED,
+                throw new PostingException(PostingException.ErrorCode.URL_BLOCKED,
                         "The posting link points to a non-public address and was blocked.");
             }
         }
@@ -120,8 +120,8 @@ public class UrlGuard {
         return false;
     }
 
-    private static UrlGuardException invalid(String message) {
-        return new UrlGuardException(UrlGuardException.ErrorCode.URL_INVALID, message);
+    private static PostingException invalid(String message) {
+        return new PostingException(PostingException.ErrorCode.URL_INVALID, message);
     }
 
     private static InetAddress[] systemResolve(String hostname) {

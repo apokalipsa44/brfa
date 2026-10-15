@@ -43,6 +43,16 @@ cvchecker:
     stage-delay: 2s     # simulated-pipeline delay per stage (only used when mode=simulated)
   sse:
     heartbeat-interval: 15s
+  posting-fetch:      # bounds for resolving a link posting (docs/API.md §4.1/§8)
+    connect-timeout: 5s
+    read-timeout: 15s
+    total-timeout: 30s
+    max-bytes: 2000000        # 2 MB
+    max-redirects: 5
+    min-text-length: 400      # below this, escalate to the headless render
+    browser-enabled: true
+    user-agent: "CvCheckerBot/1.0 (+https://cvchecker.local; job-posting-reader)"
+    max-concurrent-browser: 1
   pdf:
     font-family: DejaVuSans
     font-ttf: DejaVuSans.ttf
