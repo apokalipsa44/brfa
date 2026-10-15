@@ -75,8 +75,8 @@ class CvRewriteServiceTest {
         assertThatThrownBy(() -> service.validate(null)).isInstanceOf(LlmInvalidOutputException.class);
         assertThatThrownBy(() -> service.validate(new CvRewriteResult(null, List.of())))
                 .isInstanceOf(LlmInvalidOutputException.class);
-        CvDocument empty = new CvDocument("  ", null, null, null, null, List.of(), List.of(), List.of(), List.of(),
-                List.of());
+        CvDocument empty = new CvDocument("  ", null, null, null, null, null, null, List.of(), List.of(), List.of(),
+                List.of(), List.of());
         assertThatThrownBy(() -> service.validate(new CvRewriteResult(empty, List.of())))
                 .isInstanceOf(LlmInvalidOutputException.class);
     }
@@ -93,7 +93,8 @@ class CvRewriteServiceTest {
     }
 
     private static CvRewriteResult rewrite() {
-        CvDocument document = new CvDocument("Jan Kowalski", "jan@example.com", null, null, "Senior Java dev",
+        CvDocument document = new CvDocument("Jan Kowalski", "Java Developer", "jan@example.com", null, null,
+                List.of(), "Senior Java dev",
                 List.of(new ExperienceEntry("Backend Developer", "Acme", "2020-2025", List.of("Built services"))),
                 List.of(), List.of("Java", "Spring"), List.of(), List.of());
         return new CvRewriteResult(document,

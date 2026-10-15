@@ -106,7 +106,7 @@ public class SimulatedAnalysisPipeline implements AnalysisPipeline {
     /** Renders a trivial but valid selectable-text PDF as the result file. */
     private void renderFakePdf(Analysis analysis, long token) throws IOException {
         Path result = storage.root().resolve(analysis.id() + "-result.pdf");
-        CvDocument document = new CvDocument("Improved CV", null, null, null,
+        CvDocument document = new CvDocument("Improved CV", null, null, null, null, List.of(),
                 "Improved by the simulated analysis pipeline.", List.of(), List.of(), List.of("Java", "Spring"),
                 List.of(), List.of());
         renderer.render(document, result);

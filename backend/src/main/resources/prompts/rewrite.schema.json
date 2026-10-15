@@ -5,9 +5,11 @@
       "type": "object",
       "properties": {
         "fullName": { "type": "string" },
+        "headline": { "type": "string", "description": "Short professional title, e.g. 'Frontend / Full Stack Software Developer'" },
         "email": { "type": "string" },
         "phone": { "type": "string" },
         "location": { "type": "string" },
+        "links": { "type": "array", "items": { "type": "string" }, "description": "LinkedIn/GitHub/portfolio URLs already present in the CV" },
         "summary": { "type": "string" },
         "experience": {
           "type": "array",
@@ -36,11 +38,14 @@
             "additionalProperties": false
           }
         },
-        "skills": { "type": "array", "items": { "type": "string" } },
+        "skills": {
+          "type": "array",
+          "items": { "type": "string", "description": "Use 'Category: value1, value2' format (e.g. 'Frontend: Angular, TypeScript')" }
+        },
         "languages": { "type": "array", "items": { "type": "string" } },
         "certifications": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["fullName", "email", "phone", "location", "summary", "experience", "education", "skills", "languages", "certifications"],
+      "required": ["fullName", "headline", "email", "phone", "location", "links", "summary", "experience", "education", "skills", "languages", "certifications"],
       "additionalProperties": false
     },
     "changes": {
