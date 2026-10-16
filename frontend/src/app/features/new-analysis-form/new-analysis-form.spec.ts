@@ -121,4 +121,30 @@ describe('NewAnalysisForm', () => {
     expect(postingTextarea().value).toBe('');
     expect(analyses.selectedId()).toBe('a1');
   });
+
+  it('submits a link as jobPostingUrl', () => {
+    cv.restore();
+    http.expectOne('/api/cv').flush(CV_READY);
+    http.expectOne('/api/llm/models').flush(READY_MODELS);
+    fixture.detectChanges();
+
+    postingTextarea().value = 'https://example.com/jobs/123';
+    postingTextarea().dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    submitButton().click();
+    fixture.detectChanges();
+
+    const request = http.expectOne('/api/analyses');
+    expect(request.request.body).toEqual({ jobPostingUrl: 'https://example.com/jobs/123' });
+    request.flush({
+      id: 'a2',
+      title: 'Acme · Java',
+      stage: 'QUEUED',
+      score: null,
+      progress: 0,
+      createdAt: '2026-10-12T10:00:00Z',
+      updatedAt: '2026-10-12T10:00:00Z',
+    });
+    http.expectOne('/api/analyses/a2').flush({});
+  });
 });

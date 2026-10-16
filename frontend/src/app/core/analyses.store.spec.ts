@@ -30,6 +30,7 @@ function detail(id: string, overrides: Partial<AnalysisDetail> = {}): AnalysisDe
   return {
     ...summary(id),
     modelId: 'qwen/iq3_s.gguf',
+    sourceUrl: null,
     summary: 'Solid match.',
     matchedKeywords: ['Java'],
     missingKeywords: ['Kubernetes'],
@@ -83,6 +84,18 @@ describe('AnalysesStore', () => {
 
     expect(store.selectedId()).toBe('a1');
     expect(store.creating()).toBe(false);
+  });
+
+  it('creates an analysis from a link', () => {
+    seedAnalyses(http, []);
+
+    store.createFromUrl('https://example.com/jobs/123');
+    const request = http.expectOne('/api/analyses');
+    expect(request.request.body).toEqual({ jobPostingUrl: 'https://example.com/jobs/123' });
+    request.flush(summary('a1', { stage: 'QUEUED', score: null, progress: 0 }));
+    http.expectOne('/api/analyses/a1').flush({});
+
+    expect(store.selectedId()).toBe('a1');
   });
 
   it('reports a backend error on create instead of throwing', () => {
@@ -290,5 +303,29 @@ describe('AnalysesStore', () => {
     http.expectOne('/api/analyses/a1').flush(detail('a1', { stage: 'EVALUATING' }));
 
     expect(store.analyses()[0].stage).toBe('EVALUATING');
+  });
+
+  it('cancels a running analysis', () => {
+    seedAnalyses(http, [summary('a1', { stage: 'EVALUATING' })]);
+
+    store.cancel('a1');
+    const request = http.expectOne('/api/analyses/a1/cancel');
+    expect(request.request.method).toBe('POST');
+    request.flush(summary('a1', { stage: 'CANCELLED' }));
+    // cancel also refreshes the detail
+    http.expectOne('/api/analyses/a1').flush(detail('a1', { stage: 'CANCELLED' }));
+
+    expect(store.analyses()[0].stage).toBe('CANCELLED');
+  });
+
+  it('reports a backend error on cancel instead of throwing', () => {
+    seedAnalyses(http, [summary('a1', { stage: 'AWAITING_REVIEW' })]);
+
+    store.cancel('a1');
+    http
+      .expectOne('/api/analyses/a1/cancel')
+      .flush('not cancellable', { status: 409, statusText: 'Conflict' });
+
+    expect(store.actionError()).not.toBeNull();
   });
 });

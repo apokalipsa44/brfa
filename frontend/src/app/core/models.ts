@@ -59,6 +59,8 @@ export interface CvChange {
 /** Full analysis detail (docs/API.md §4): summary plus evaluation and rewrite payloads. */
 export interface AnalysisDetail extends AnalysisSummary {
   modelId: string | null;
+  /** The link the user provided, or null for a pasted posting (docs/API.md §4). */
+  sourceUrl: string | null;
   summary: string | null;
   matchedKeywords: string[];
   missingKeywords: string[];

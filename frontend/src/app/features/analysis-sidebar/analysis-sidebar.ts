@@ -40,6 +40,7 @@ import { AnalysisCard } from './analysis-card';
               (renamed)="onRename($event)"
               (appliedChanged)="onAppliedChanged($event)"
               (deleted)="analyses.remove($event)"
+              (cancelled)="analyses.cancel($event)"
             />
           }
         </div>

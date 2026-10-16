@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
 import { CvContextStore } from '../../core/cv-context.store';
+import { modelStars } from '../../core/model-rating';
 
 /**
  * LM Studio model picker (docs/API.md §3). Independent of the CV and of any analysis: the choice is
@@ -32,8 +33,8 @@ import { CvContextStore } from '../../core/cv-context.store';
           @if (cvContext.activeModelId() === null) {
             <option value="">Select a model</option>
           }
-          @for (model of cvContext.models(); track model.id) {
-            <option [value]="model.id">{{ model.id }}</option>
+          @for (model of options(); track model.id) {
+            <option [value]="model.id">{{ model.label }}</option>
           }
         }
       </select>
@@ -56,6 +57,14 @@ export class ModelSelect {
     const value = (event.target as HTMLSelectElement).value;
     if (value) this.cvContext.selectModel(value);
   }
+
+  /** Model ids prefixed with a heuristic star bar (core/model-rating.ts), precomputed for the template. */
+  protected readonly options = computed(() =>
+    this.cvContext.models().map((model) => ({
+      id: model.id,
+      label: `${modelStars(model.id)} ${model.id}`,
+    })),
+  );
 
   /** Green when a model is ready, amber while loading, grey with no candidates, red otherwise. */
   protected readonly dotTone = computed(() => {

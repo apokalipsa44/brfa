@@ -34,6 +34,8 @@ cvchecker:
   persistence: sqlite   # sqlite = analyses survive restarts (docs/API.md §8); memory = tests only
   llm:
     read-timeout: 10m   # a local model may answer over minutes (plan §6.3)
+    reasoning-effort: none   # disable model "thinking" for the JSON steps (huge latency win); blank = model default
+    max-output-tokens: 4096  # structured outputs are short once thinking is off (was 8192)
   lmstudio:
     # native v1 REST API root, without the OpenAI-compat /v1 suffix (docs/API.md §3)
     base-url: ${LM_STUDIO_BASE_URL:http://localhost:1234}

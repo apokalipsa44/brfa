@@ -13,7 +13,8 @@ The app is a small **workspace**, not a form + job stack:
 - The posting can be **pasted as text** or **given as a link**; for a link the server fetches the
   page itself (§4, `POST /api/analyses`).
 - A queued or running analysis can be **cancelled** and a cancelled or failed one can be
-  **retried** (`POST /api/analyses/{id}/cancel`, `/retry`).
+  **retried** (`POST /api/analyses/{id}/cancel`, `/retry`); a **link** analysis can be **re-run
+  from scratch** with `/rerun` (re-fetch + re-evaluate, replacing its results).
 
 `docs/API.md` is the contract; the backend and frontend are implemented against it. The old
 `/api/cv-jobs*` endpoints and the per-job SSE streams were removed once the redesign shipped —
@@ -398,6 +399,20 @@ suggestions, approved suggestion ids) and going back to the queue.
 - **409** `NOT_RETRYABLE` — the analysis is neither `FAILED` nor `CANCELLED`.
 - **404** `ANALYSIS_NOT_FOUND`.
 
+### `POST /api/analyses/{id}/rerun` — re-run a link analysis from scratch
+
+Allowed only for a **link** analysis (`sourceUrl != null`) that is **not currently running**
+(`AWAITING_REVIEW`, `COMPLETED`, `FAILED` or `CANCELLED`). Drops every stage result — the resolved
+posting text, evaluation, suggestions, applied changes and the result PDF — and starts the pipeline
+again from `QUEUED`, so the URL is **re-fetched** and everything is recomputed. `attemptId` is
+incremented. User values (`title`, `description`, `appliedAt`) are preserved, and the model id stays
+the one snapshotted at creation (no re-snapshot).
+
+- **202**: the updated summary (stage `QUEUED`, `score` cleared).
+- **409** `NOT_RERUNNABLE` — a pasted analysis, or one whose stage is currently running
+  (QUEUED/FETCHING_POSTING/EVALUATING/REWRITING/GENERATING_PDF).
+- **404** `ANALYSIS_NOT_FOUND`.
+
 ### `GET /api/analyses/{id}/result` — download improved PDF
 
 - **200**: `Content-Type: application/pdf`,
@@ -439,6 +454,7 @@ suggestions, approved suggestion ids) and going back to the queue.
 | `NOT_AWAITING_REVIEW` | 409 | `apply` while not awaiting review |
 | `NO_SUGGESTIONS_APPROVED` | 422 | `apply` with an empty approval list |
 | `NOT_RETRYABLE` | 409 | `retry` while neither failed nor cancelled |
+| `NOT_RERUNNABLE` | 409 | `rerun` on a pasted analysis or one that is currently running |
 | `NOT_CANCELLABLE` | 409 | `cancel` while not in a cancellable stage |
 | `NOT_READY` | 409 | result requested before completion |
 | `RESULT_NOT_FOUND` | 404 | completed but the file was cleaned up |
@@ -514,6 +530,7 @@ browser's per-domain connection limit (≈6 on HTTP/1.1) that previously froze j
 | Event | Sent when | `data` |
 |---|---|---|
 | `analysis.updated` | any stage/progress/title/score change for an analysis | analysis summary §4 |
+| `analysis.output` | transient streamed LLM output while `EVALUATING`/`REWRITING` | `{ "analysisId": "…", "stage": "EVALUATING", "delta": "…" }` |
 | `analysis.deleted` | an analysis was removed | `{ "analysisId": "…" }` |
 | `models.updated` | the model state changed (selection, load, readiness) | `{}` (client re-fetches `GET /api/llm/models`) |
 | `cv.updated` | the active CV was uploaded or replaced | `{}` (client re-fetches `GET /api/cv`) |
@@ -539,6 +556,9 @@ Connection / replay semantics:
   buffer, default last 1000 events) then continues live. Nothing is lost, nothing is duplicated.
 - Heartbeat `ping` keeps proxies from closing an idle connection — treated by the client as a
   liveness signal, **never** shown to the user.
+- `analysis.output` is **transient**: it carries no `id`, is not buffered and is never replayed, so it
+  cannot advance a client's `Last-Event-ID` past real state events. The client shows it while a stage
+  runs and drops it on the next `analysis.updated` for that analysis.
 - The stream never closes for terminal states: with one global stream, a freshly created analysis
   must be observable on the same open connection. `analysis.deleted` tells tabs to drop a card.
 - Context changes reach every tab too: `models.updated` and `cv.updated` keep the top-bar model

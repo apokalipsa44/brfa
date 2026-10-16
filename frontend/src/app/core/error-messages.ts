@@ -33,6 +33,7 @@ const MESSAGES: Record<string, string> = {
   NO_SUGGESTIONS_APPROVED: 'Select at least one change to apply.',
   NOT_FAILED: 'This analysis is not in a failed state.',
   NOT_RETRYABLE: 'This analysis can only be retried after a failure or cancellation.',
+  NOT_RERUNNABLE: 'This analysis can only be checked again once it is a finished link analysis.',
   NOT_CANCELLABLE: 'This analysis is no longer running.',
   NOT_READY: 'The improved CV is not ready yet.',
   RESULT_NOT_FOUND: 'The improved CV file is no longer available.',

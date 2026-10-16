@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.core.io.ByteArrayResource;
@@ -24,6 +25,7 @@ import static org.mockito.Mockito.when;
 class CvRewriteServiceTest {
 
     private ChatClient.CallResponseSpec call;
+    private ChatClient.ChatClientRequestSpec request;
     private CvRewriteService service;
 
     @BeforeEach
@@ -31,15 +33,17 @@ class CvRewriteServiceTest {
         ChatClient chat = mock(ChatClient.class);
         ChatClient.Builder builder = mock(ChatClient.Builder.class);
         when(builder.build()).thenReturn(chat);
-        ChatClient.ChatClientRequestSpec request = mock(ChatClient.ChatClientRequestSpec.class);
+        request = mock(ChatClient.ChatClientRequestSpec.class);
         call = mock(ChatClient.CallResponseSpec.class);
         when(chat.prompt()).thenReturn(request);
         when(request.user(anyString())).thenReturn(request);
         when(request.options(any(OpenAiChatOptions.Builder.class))).thenReturn(request);
         when(request.call()).thenReturn(call);
         service = new CvRewriteService(builder, new ObjectMapper(),
+                new LlmStructuredCaller(new ObjectMapper()),
                 new ByteArrayResource("Return JSON.".getBytes(StandardCharsets.UTF_8)),
-                new ByteArrayResource("{}".getBytes(StandardCharsets.UTF_8)));
+                new ByteArrayResource("{}".getBytes(StandardCharsets.UTF_8)),
+                "none", 4096);
     }
 
     @Test
@@ -48,6 +52,17 @@ class CvRewriteServiceTest {
         when(call.entity(CvRewriteResult.class)).thenReturn(good);
 
         assertThat(service.rewrite("cv", "job", evaluation(), approved(), null)).isEqualTo(good);
+    }
+
+    @Test
+    void sendsTheSharedContextAsThePromptPrefix() {
+        when(call.entity(CvRewriteResult.class)).thenReturn(rewrite());
+
+        service.rewrite("my cv", "my job", evaluation(), approved(), null);
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(request).user(captor.capture());
+        assertThat(captor.getValue()).startsWith(SharedContext.of("my cv", "my job"));
     }
 
     @Test

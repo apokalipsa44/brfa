@@ -8,6 +8,12 @@ interface DeletedPayload {
   analysisId: string;
 }
 
+interface OutputPayload {
+  analysisId: string;
+  stage: string;
+  delta: string;
+}
+
 /**
  * The single SSE stream for the whole app (docs/API.md §7). One `EventSource('/api/events')`
  * receives events for every analysis, which removes the per-domain connection limit that used to
@@ -53,6 +59,14 @@ export class EventsService {
     source.addEventListener('analysis.deleted', (event) => {
       const payload = parse<DeletedPayload>(event);
       if (payload?.analysisId) this.analyses.onAnalysisDeleted(payload.analysisId);
+    });
+
+    // Transient live LLM output: shown while a stage runs, never replayed after a reconnect.
+    source.addEventListener('analysis.output', (event) => {
+      const payload = parse<OutputPayload>(event);
+      if (payload?.analysisId && payload.delta) {
+        this.analyses.onAnalysisOutput(payload.analysisId, payload.delta);
+      }
     });
 
     // A `models.updated` event carries no state, so the client re-fetches the model context.

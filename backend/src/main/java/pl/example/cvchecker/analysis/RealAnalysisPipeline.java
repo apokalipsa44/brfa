@@ -8,6 +8,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import pl.example.cvchecker.llm.CvChange;
@@ -18,6 +19,7 @@ import pl.example.cvchecker.llm.Evaluation;
 import pl.example.cvchecker.llm.EvaluationService;
 import pl.example.cvchecker.llm.LlmAbortedException;
 import pl.example.cvchecker.llm.LlmInvalidOutputException;
+import pl.example.cvchecker.llm.LlmTokenSink;
 import pl.example.cvchecker.pdf.CvPdfRenderer;
 import pl.example.cvchecker.posting.PostingException;
 import pl.example.cvchecker.posting.PostingResolver;
@@ -47,15 +49,18 @@ public class RealAnalysisPipeline implements AnalysisPipeline {
     private final TempFileStorage storage;
     private final AnalysisRuns runs;
     private final PostingResolver postingResolver;
+    private final ApplicationEventPublisher events;
 
     public RealAnalysisPipeline(EvaluationService evaluationService, CvRewriteService rewriteService,
-            CvPdfRenderer renderer, TempFileStorage storage, AnalysisRuns runs, PostingResolver postingResolver) {
+            CvPdfRenderer renderer, TempFileStorage storage, AnalysisRuns runs, PostingResolver postingResolver,
+            ApplicationEventPublisher events) {
         this.evaluationService = evaluationService;
         this.rewriteService = rewriteService;
         this.renderer = renderer;
         this.storage = storage;
         this.runs = runs;
         this.postingResolver = postingResolver;
+        this.events = events;
     }
 
     @Override
@@ -118,7 +123,7 @@ public class RealAnalysisPipeline implements AnalysisPipeline {
         }
         if (!analysis.isAttemptCurrent(token)) return;
         Evaluation evaluation = evaluationService.evaluate(analysis.cvText(), analysis.postingText(),
-                analysis.modelId());
+                analysis.modelId(), outputSink(analysis));
         if (!analysis.isAttemptCurrent(token)) return;
         if (!analysis.attemptSetEvaluation(token, evaluation)) return;
         analysis.attemptTransition(token, AnalysisStage.AWAITING_REVIEW, 40);
@@ -160,7 +165,7 @@ public class RealAnalysisPipeline implements AnalysisPipeline {
             }
             if (!analysis.isAttemptCurrent(token)) return;
             CvRewriteResult rewrite = rewriteService.rewrite(analysis.cvText(), analysis.postingText(), evaluation,
-                    analysis.approvedSuggestions(), analysis.modelId());
+                    analysis.approvedSuggestions(), analysis.modelId(), outputSink(analysis));
             if (!analysis.isAttemptCurrent(token)) return;
             List<CvChange> changes = rewrite.changes();
             analysis.attemptSetAppliedChanges(token, changes);
@@ -180,6 +185,21 @@ public class RealAnalysisPipeline implements AnalysisPipeline {
         }
         analysis.attemptSetResultFile(token, result);
         analysis.attemptComplete(token);
+    }
+
+    /** Builds a throttled sink that forwards model output to the global SSE stream (docs/API.md §7). */
+    private LlmTokenSink outputSink(Analysis analysis) {
+        StringBuilder pending = new StringBuilder();
+        long[] lastSentAt = {System.currentTimeMillis()};
+        return delta -> {
+            pending.append(delta);
+            long now = System.currentTimeMillis();
+            if (pending.length() >= 160 || now - lastSentAt[0] >= 300) {
+                events.publishEvent(new AnalysisOutputEvent(analysis.id(), analysis.stage().name(), pending.toString()));
+                pending.setLength(0);
+                lastSentAt[0] = now;
+            }
+        };
     }
 
     private static AnalysisStage failedStageOf(Analysis analysis) {

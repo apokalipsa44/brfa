@@ -28,11 +28,6 @@ public class CvRewriteService {
     /** Max attempts: initial call + 2 retries on invalid structured output (plan §6.7). */
     private static final int MAX_ATTEMPTS = 3;
 
-    private static final int MAX_CV_CHARS = 15_000;
-
-    /** Rewrite/analysis JSON plus corrective retries must not hit LM Studio's default output cap. */
-    private static final int MAX_OUTPUT_TOKENS = 8192;
-
     /** The user-approved suggestions plus the title context, serialized into the prompt. */
     private record RewriteContext(String employer, String position, List<Suggestion> approvedSuggestions) {
     }
@@ -41,12 +36,20 @@ public class CvRewriteService {
     private final ObjectMapper mapper;
     private final String basePrompt;
     private final String jsonSchema;
+    private final String reasoningEffort;
+    private final int maxOutputTokens;
+    private final LlmStructuredCaller caller;
 
-    public CvRewriteService(ChatClient.Builder builder, ObjectMapper mapper,
+    public CvRewriteService(ChatClient.Builder builder, ObjectMapper mapper, LlmStructuredCaller caller,
             @Value("classpath:/prompts/rewrite.st") Resource rewritePrompt,
-            @Value("classpath:/prompts/rewrite.schema.json") Resource rewriteSchema) {
+            @Value("classpath:/prompts/rewrite.schema.json") Resource rewriteSchema,
+            @Value("${cvchecker.llm.reasoning-effort:none}") String reasoningEffort,
+            @Value("${cvchecker.llm.max-output-tokens:4096}") int maxOutputTokens) {
         this.chat = builder.build();
         this.mapper = mapper;
+        this.caller = caller;
+        this.reasoningEffort = reasoningEffort;
+        this.maxOutputTokens = maxOutputTokens;
         try {
             this.basePrompt = new String(rewritePrompt.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             this.jsonSchema = new String(rewriteSchema.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -62,6 +65,14 @@ public class CvRewriteService {
      */
     public CvRewriteResult rewrite(String cvText, String jobDescription, Evaluation evaluation,
             List<Suggestion> approvedSuggestions, String model) {
+        return rewrite(cvText, jobDescription, evaluation, approvedSuggestions, model, null);
+    }
+
+    /**
+     * @param sink streamed-output sink, or {@code null} for the blocking path
+     */
+    public CvRewriteResult rewrite(String cvText, String jobDescription, Evaluation evaluation,
+            List<Suggestion> approvedSuggestions, String model, LlmTokenSink sink) {
         String contextJson;
         try {
             List<Suggestion> approved = approvedSuggestions == null ? List.of() : approvedSuggestions;
@@ -70,22 +81,23 @@ public class CvRewriteService {
         } catch (Exception e) {
             throw new IllegalStateException("Cannot serialize approved suggestions for the rewrite prompt.", e);
         }
-        String prompt = basePrompt
-                + "\n<cv>\n" + truncate(cvText) + "\n</cv>\n<job>\n" + jobDescription + "\n</job>\n"
-                + "<approved-suggestions>\n" + contextJson + "\n</approved-suggestions>";
+        // Shared context first (byte-identical to the evaluation step's) so the backend can reuse its
+        // KV cache across the two calls; the step-specific instructions and suggestions follow.
+        String prompt = SharedContext.of(cvText, jobDescription) + basePrompt
+                + "\n<approved-suggestions>\n" + contextJson + "\n</approved-suggestions>";
         Exception lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             if (Thread.currentThread().isInterrupted()) {
                 throw new LlmAbortedException("Rewrite aborted: the analysis run was cancelled.");
             }
             try {
-                String userPrompt = retryHint(attempt) + prompt;
+                String userPrompt = prompt + retryHint(attempt);
                 OpenAiChatOptions.Builder options = jsonSchemaOptions();
                 if (model != null && !model.isBlank()) {
                     options.model(model);
                 }
-                CvRewriteResult result = chat.prompt().user(userPrompt).options(options).call()
-                        .entity(CvRewriteResult.class);
+                CvRewriteResult result = caller.call(
+                        chat.prompt().user(userPrompt).options(options), CvRewriteResult.class, sink);
                 validate(result);
                 return result;
             } catch (LlmInvalidOutputException e) {
@@ -135,20 +147,20 @@ public class CvRewriteService {
      * structurally invalid; validation + retry remain as the safety net (plan §6.7).
      */
     private OpenAiChatOptions.Builder jsonSchemaOptions() {
-        return OpenAiChatOptions.builder()
+        OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder()
                 .temperature(0.2)
-                .maxTokens(MAX_OUTPUT_TOKENS)
+                .maxTokens(maxOutputTokens)
                 .responseFormat(OpenAiChatModel.ResponseFormat.builder()
                         .type(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA)
                         .jsonSchema(jsonSchema)
                         .strict(true)
                         .build());
-    }
-
-    private static String truncate(String text) {
-        if (text != null && text.length() > MAX_CV_CHARS) {
-            return text.substring(0, MAX_CV_CHARS) + "\n[truncated: CV text exceeded the model input limit]";
+        // Turning "thinking" off is the single biggest latency win for reasoning-capable local models
+        // (docs/DECISIONS.md): the structured JSON is short, so hidden reasoning tokens are pure cost.
+        // The builder mutates in place, so the fluent return value is intentionally ignored.
+        if (reasoningEffort != null && !reasoningEffort.isBlank()) {
+            builder.reasoningEffort(reasoningEffort);
         }
-        return text;
+        return builder;
     }
 }

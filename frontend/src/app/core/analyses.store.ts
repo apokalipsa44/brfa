@@ -1,4 +1,5 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
+import { Observable } from 'rxjs';
 import { AnalysisPatch, WorkspaceApi } from './api/workspace.api';
 import { problemMessage } from './error-messages';
 import { todayIso } from './format';
@@ -22,12 +23,16 @@ export class AnalysesStore {
   private readonly _detailLoading = signal(false);
   private readonly _creating = signal(false);
   private readonly _actionError = signal<string | null>(null);
+  private readonly _liveOutput = signal<Record<string, string>>({});
 
   readonly analyses = this._analyses.asReadonly();
   readonly selectedId = this._selectedId.asReadonly();
   readonly detailLoading = this._detailLoading.asReadonly();
   readonly creating = this._creating.asReadonly();
   readonly actionError = this._actionError.asReadonly();
+
+  /** Transient live LLM output per analysis (docs/API.md §7 `analysis.output`); empty when idle. */
+  readonly liveOutput = this._liveOutput.asReadonly();
 
   /** The detail of the selected analysis, or null while it is not loaded/selected. */
   readonly selected = computed<AnalysisDetail | null>(() => {
@@ -58,9 +63,19 @@ export class AnalysesStore {
   }
 
   create(jobPosting: string): void {
+    this.start(this.api.createAnalysis(jobPosting));
+  }
+
+  /** Starts an analysis from a link; the server fetches the posting (docs/API.md §4). */
+  createFromUrl(jobPostingUrl: string): void {
+    this.start(this.api.createAnalysisFromUrl(jobPostingUrl));
+  }
+
+  /** Shared POST lifecycle for both posting sources: optimistic flag, select and load the detail. */
+  private start(request: Observable<AnalysisSummary>): void {
     this._actionError.set(null);
     this._creating.set(true);
-    this.api.createAnalysis(jobPosting).subscribe({
+    request.subscribe({
       next: (summary) => {
         this.upsert(summary);
         this._creating.set(false);
@@ -150,6 +165,32 @@ export class AnalysesStore {
     });
   }
 
+  /** Re-runs a link analysis from scratch, overwriting its results (docs/API.md §4). */
+  rerun(id: string): void {
+    this._actionError.set(null);
+    this.api.rerunAnalysis(id).subscribe({
+      next: (summary) => {
+        this.upsert(summary);
+        this.loadDetail(id);
+      },
+      error: (err: unknown) =>
+        this._actionError.set(problemMessage(err, 'The analysis could not be started again.')),
+    });
+  }
+
+  /** Stops a queued or running analysis (docs/API.md §4); the in-flight LLM call is aborted. */
+  cancel(id: string): void {
+    this._actionError.set(null);
+    this.api.cancelAnalysis(id).subscribe({
+      next: (summary) => {
+        this.upsert(summary);
+        this.loadDetail(id);
+      },
+      error: (err: unknown) =>
+        this._actionError.set(problemMessage(err, 'The analysis could not be cancelled.')),
+    });
+  }
+
   remove(id: string): void {
     this.api.deleteAnalysis(id).subscribe({
       next: () => this.dropLocally(id),
@@ -162,6 +203,7 @@ export class AnalysesStore {
   onAnalysisUpdated(summary: AnalysisSummary): void {
     const previous = this._analyses().find((a) => a.id === summary.id) ?? null;
     this.upsert(summary);
+    this.clearLiveOutput(summary.id);
 
     const detailNeeded = summary.id === this._selectedId() && !this._details()[summary.id];
     const stageChanged = previous?.stage !== summary.stage;
@@ -183,7 +225,29 @@ export class AnalysesStore {
 
   /** Applies an `analysis.deleted` event (also used after a local delete). */
   onAnalysisDeleted(id: string): void {
+    this.clearLiveOutput(id);
     this.dropLocally(id);
+  }
+
+  /**
+   * Appends a streamed LLM output chunk (docs/API.md §7 `analysis.output`). The buffer is capped so a
+   * long generation cannot grow it without bound; a later `analysis.updated` clears it.
+   */
+  onAnalysisOutput(id: string, delta: string): void {
+    if (!delta) return;
+    this._liveOutput.update((map) => {
+      const next = (map[id] ?? '') + delta;
+      return { ...map, [id]: next.length > 4000 ? next.slice(-4000) : next };
+    });
+  }
+
+  private clearLiveOutput(id: string): void {
+    this._liveOutput.update((map) => {
+      if (!(id in map)) return map;
+      const next = { ...map };
+      delete next[id];
+      return next;
+    });
   }
 
   private loadDetail(id: string): void {

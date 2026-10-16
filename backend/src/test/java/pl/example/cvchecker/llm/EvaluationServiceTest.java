@@ -5,9 +5,12 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.core.io.ByteArrayResource;
+
+import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,6 +25,7 @@ import static org.mockito.Mockito.when;
 class EvaluationServiceTest {
 
     private ChatClient.CallResponseSpec call;
+    private ChatClient.ChatClientRequestSpec request;
     private EvaluationService service;
 
     @BeforeEach
@@ -29,15 +33,28 @@ class EvaluationServiceTest {
         ChatClient chat = mock(ChatClient.class);
         ChatClient.Builder builder = mock(ChatClient.Builder.class);
         when(builder.build()).thenReturn(chat);
-        ChatClient.ChatClientRequestSpec request = mock(ChatClient.ChatClientRequestSpec.class);
+        request = mock(ChatClient.ChatClientRequestSpec.class);
         call = mock(ChatClient.CallResponseSpec.class);
         when(chat.prompt()).thenReturn(request);
         when(request.user(anyString())).thenReturn(request);
         when(request.options(any(OpenAiChatOptions.Builder.class))).thenReturn(request);
         when(request.call()).thenReturn(call);
-        service = new EvaluationService(builder,
+        service = new EvaluationService(builder, new LlmStructuredCaller(new ObjectMapper()),
                 new ByteArrayResource("Return JSON.".getBytes(StandardCharsets.UTF_8)),
-                new ByteArrayResource("{}".getBytes(StandardCharsets.UTF_8)));
+                new ByteArrayResource("{}".getBytes(StandardCharsets.UTF_8)),
+                "none", 4096);
+    }
+
+    @Test
+    void disablesModelThinkingWithReasoningEffortNone() {
+        when(call.entity(Evaluation.class)).thenReturn(evaluation(60));
+
+        service.evaluate("cv", "job", null);
+
+        ArgumentCaptor<OpenAiChatOptions.Builder> captor = ArgumentCaptor.forClass(OpenAiChatOptions.Builder.class);
+        verify(request).options(captor.capture());
+        assertThat(captor.getValue().build().getReasoningEffort()).isEqualTo("none");
+        assertThat(captor.getValue().build().getMaxTokens()).isEqualTo(4096);
     }
 
     @Test
@@ -46,6 +63,17 @@ class EvaluationServiceTest {
         when(call.entity(Evaluation.class)).thenReturn(good);
 
         assertThat(service.evaluate("cv", "job", null)).isEqualTo(good);
+    }
+
+    @Test
+    void sendsTheSharedContextAsThePromptPrefix() {
+        when(call.entity(Evaluation.class)).thenReturn(evaluation(60));
+
+        service.evaluate("my cv", "my job", null);
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(request).user(captor.capture());
+        assertThat(captor.getValue()).startsWith(SharedContext.of("my cv", "my job"));
     }
 
     @Test

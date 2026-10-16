@@ -70,6 +70,20 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
           }
         </button>
 
+        @if (compact()) {
+          <div class="relative z-10 flex shrink-0 items-center">
+            <button
+              type="button"
+              class="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+              aria-label="Cancel analysis"
+              title="Stop"
+              (click)="cancelled.emit(summary().id)"
+            >
+              <span aria-hidden="true">✕</span>
+            </button>
+          </div>
+        }
+
         @if (!compact()) {
           <div class="relative z-10 flex shrink-0 flex-col items-end justify-between gap-2">
             <div class="flex items-center gap-1">
@@ -128,6 +142,7 @@ export class AnalysisCard {
   readonly renamed = output<{ id: string; title: string }>();
   readonly appliedChanged = output<{ id: string; applied: boolean }>();
   readonly deleted = output<string>();
+  readonly cancelled = output<string>();
 
   protected readonly editing = signal(false);
 

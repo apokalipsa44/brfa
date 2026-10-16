@@ -234,6 +234,26 @@ public class AnalysisController {
     }
 
     /**
+     * Re-runs a link analysis from scratch (docs/API.md §4): drops the previous results (fetched
+     * posting text, evaluation, suggestions, applied changes, result file) and starts the pipeline
+     * again from QUEUED, so the URL is re-fetched. Only a link analysis that is not currently running
+     * can be re-run; user values (title, description, applied date) are preserved.
+     */
+    @PostMapping("/{id}/rerun")
+    public ResponseEntity<AnalysisSummary> rerun(@PathVariable String id) {
+        Analysis analysis = require(id);
+        Path previousResult = analysis.resultFile();
+        if (!analysis.resetForRerun()) {
+            throw new ApiException(409, "NOT_RERUNNABLE", "Not rerunnable",
+                    "Only a link analysis that is not currently running can be checked again.");
+        }
+        deleteResultQuietly(previousResult);
+        AnalysisSummary rerunning = analysis.summary();
+        pipeline.start(analysis); // resume as a fresh QUEUED run: FETCHING_POSTING → EVALUATING → AWAITING_REVIEW
+        return ResponseEntity.accepted().body(rerunning);
+    }
+
+    /**
      * Re-runs a FAILED or CANCELLED analysis (docs/API.md §4), resuming at the stage it failed or was
      * cancelled in; the 202 body already shows that stage.
      */
@@ -309,5 +329,15 @@ public class AnalysisController {
     private Analysis require(String id) {
         return registry.find(id).orElseThrow(() -> new ApiException(404, "ANALYSIS_NOT_FOUND",
                 "Analysis not found", "No analysis with this id."));
+    }
+
+    /** Deletes a superseded result PDF after a re-run; a missing/absent file is not an error. */
+    private void deleteResultQuietly(Path file) {
+        if (file == null) return;
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            log.warn("Could not delete superseded result file for analysis: {}", e.getMessage());
+        }
     }
 }

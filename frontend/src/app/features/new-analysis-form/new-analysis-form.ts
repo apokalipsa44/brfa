@@ -16,16 +16,18 @@ import { MAX_JOB_POSTING_CHARS } from '../../core/models';
     <form class="mx-auto max-w-2xl" (submit)="onSubmit($event)">
       <h2 class="text-lg font-semibold text-slate-900">New analysis</h2>
       <p class="mt-1 text-sm text-slate-500">
-        Paste a job posting. Your CV is matched against it and the changes are suggested before
-        anything is rewritten.
+        Paste a job posting or a link to one. Your CV is matched against it and the changes are
+        suggested before anything is rewritten.
       </p>
 
-      <label for="posting" class="mt-5 block text-sm font-medium text-slate-700">Job posting</label>
+      <label for="posting" class="mt-5 block text-sm font-medium text-slate-700"
+        >Job posting</label
+      >
       <textarea
         id="posting"
         rows="12"
         class="mt-1.5 w-full resize-y rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
-        placeholder="Paste the job posting text here…"
+        placeholder="Paste the job posting text or a link (https://…)"
         [value]="posting()"
         (input)="onInput($event)"
       ></textarea>
@@ -67,17 +69,25 @@ export class NewAnalysisForm {
 
   protected readonly length = computed(() => this.posting().length);
 
+  /** True when the input is a single http(s) link, so the backend fetches it (docs/API.md §4). */
+  protected readonly isLink = computed(() => URL_PATTERN.test(this.posting().trim()));
+
   /** Single source for the disabled state and the one-line helper text. */
   protected readonly hint = computed<string | null>(() => {
     if (!this.cv.hasCv()) return 'Upload a CV to continue.';
     if (!this.cv.ready()) return this.cv.reason() ?? 'Load a model in LM Studio to continue.';
-    if (this.length() === 0) return 'Paste a job posting to continue.';
-    if (this.length() > this.maxChars) return `The posting is over ${this.maxChars} characters.`;
+    if (this.length() === 0) return 'Paste a job posting or a link to continue.';
+    if (!this.isLink() && this.length() > this.maxChars)
+      return `The posting is over ${this.maxChars} characters.`;
     return null;
   });
 
   protected readonly canSubmit = computed(
-    () => this.cv.hasCv() && this.cv.ready() && this.length() > 0 && this.length() <= this.maxChars,
+    () =>
+      this.cv.hasCv() &&
+      this.cv.ready() &&
+      this.length() > 0 &&
+      (this.isLink() || this.length() <= this.maxChars),
   );
 
   protected onInput(event: Event): void {
@@ -87,8 +97,16 @@ export class NewAnalysisForm {
   protected onSubmit(event: Event): void {
     event.preventDefault();
     const text = this.posting().trim();
-    if (!text || text.length > this.maxChars) return;
-    this.analyses.create(text);
+    if (!text) return;
+    if (URL_PATTERN.test(text)) {
+      this.analyses.createFromUrl(text);
+    } else {
+      if (text.length > this.maxChars) return;
+      this.analyses.create(text);
+    }
     this.posting.set('');
   }
 }
+
+/** A single http(s) URL on its own line is treated as a posting link. */
+const URL_PATTERN = /^https?:\/\/\S+$/i;

@@ -53,6 +53,7 @@ function detailResponse(overrides: Partial<Detail> = {}): Detail {
     createdAt: '2026-10-12T10:00:00Z',
     updatedAt: '2026-10-12T10:05:00Z',
     modelId: 'qwen/iq3_s.gguf',
+    sourceUrl: null,
     summary: 'Good stack fit.',
     matchedKeywords: ['Java'],
     missingKeywords: ['Kubernetes'],
@@ -256,5 +257,41 @@ describe('AnalysisDetail review', () => {
     button.click();
     http.expectOne('/api/analyses/a1/retry').flush({ ...detailResponse(), stage: 'EVALUATING' });
     http.expectOne('/api/analyses/a1').flush(detailResponse({ stage: 'EVALUATING' }));
+  });
+
+  it('cancels a working analysis from the detail view', () => {
+    selectAnalysis({ stage: 'EVALUATING', score: null });
+
+    const button = buttonFor('Cancel analysis');
+    button.click();
+    http.expectOne('/api/analyses/a1/cancel').flush({ ...detailResponse(), stage: 'CANCELLED' });
+    http.expectOne('/api/analyses/a1').flush(detailResponse({ stage: 'CANCELLED' }));
+
+    expect(host.detail()?.detail()?.stage).toBe('CANCELLED');
+  });
+
+  it('shows the posting link and re-runs the analysis from "Check again"', () => {
+    selectAnalysis({ sourceUrl: 'https://example.com/job' });
+
+    const link = fixture.nativeElement.querySelector(
+      'a[href="https://example.com/job"]',
+    ) as HTMLAnchorElement;
+    expect(link).toBeTruthy();
+    expect(link.target).toBe('_blank');
+
+    buttonFor('Check again').click();
+    http
+      .expectOne('/api/analyses/a1/rerun')
+      .flush({ ...detailResponse(), stage: 'QUEUED', progress: 0, score: null });
+    http.expectOne('/api/analyses/a1').flush(detailResponse({ stage: 'QUEUED', progress: 0 }));
+
+    expect(host.detail()?.detail()?.stage).toBe('QUEUED');
+  });
+
+  it('hides the link and "Check again" for a pasted analysis', () => {
+    selectAnalysis();
+
+    expect(fixture.nativeElement.querySelector('a[href^="http"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Check again');
   });
 });

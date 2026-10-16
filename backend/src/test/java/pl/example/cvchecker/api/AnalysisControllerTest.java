@@ -19,6 +19,7 @@ import pl.example.cvchecker.analysis.AnalysisPipeline;
 import pl.example.cvchecker.analysis.AnalysisRegistry;
 import pl.example.cvchecker.analysis.AnalysisRuns;
 import pl.example.cvchecker.analysis.AnalysisStage;
+import pl.example.cvchecker.analysis.PostingSource;
 import pl.example.cvchecker.llm.Evaluation;
 import pl.example.cvchecker.llm.ModelContextService;
 import pl.example.cvchecker.llm.Priority;
@@ -83,7 +84,6 @@ class AnalysisControllerTest {
         analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
         return analysis;
     }
-
     @Test
     void validCreateReturns202Queued() throws Exception {
         when(cvStore.current()).thenReturn(Optional.of(cv()));
@@ -499,6 +499,52 @@ class AnalysisControllerTest {
                 .andExpect(jsonPath("$.errorCode").doesNotExist());
 
         verify(pipeline).retry(analysis);
+    }
+
+    /** A completed link analysis can be checked again: it resets to QUEUED and stage 1 restarts. */
+    @Test
+    void rerunLinkAnalysisResetsAndRestarts() throws Exception {
+        Analysis analysis = Analysis.fromUrl("a1", "cv.pdf", "text", "https://example.com/job", "qwen");
+        long token = analysis.attemptId();
+        analysis.attemptSetPosting(token, "Extracted posting", PostingSource.STATIC_HTML,
+                false, "Acme", "Dev");
+        analysis.setEvaluation(evaluation());
+        analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
+        analysis.complete();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(post("/api/analyses/a1/rerun"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.stage").value("QUEUED"))
+                .andExpect(jsonPath("$.score").doesNotExist())
+                .andExpect(jsonPath("$.attemptId").value(2));
+
+        assertThat(analysis.postingText()).isNull();
+        verify(pipeline).start(analysis);
+    }
+
+    /** A pasted analysis has no link to re-fetch. */
+    @Test
+    void rerunPastedAnalysisReturns409() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(post("/api/analyses/a1/rerun"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NOT_RERUNNABLE"));
+
+        verify(pipeline, never()).start(any());
+    }
+
+    /** A link analysis that is still running must be cancelled before it can be re-run. */
+    @Test
+    void rerunRunningLinkAnalysisReturns409() throws Exception {
+        Analysis analysis = Analysis.fromUrl("a1", "cv.pdf", "text", "https://example.com/job", "qwen");
+        analysis.transition(AnalysisStage.EVALUATING, 15);
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(post("/api/analyses/a1/rerun"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NOT_RERUNNABLE"));
     }
 
     @Test

@@ -32,16 +32,19 @@ public class PostingCleanupService {
     /** Pages can be large; keep the cleanup prompt inside the local model's context window. */
     private static final int MAX_PAGE_CHARS = 20_000;
 
-    private static final int MAX_OUTPUT_TOKENS = 8192;
+    private static final int MAX_OUTPUT_TOKENS = 4096;
 
     private final ChatClient chat;
     private final String basePrompt;
     private final String jsonSchema;
+    private final String reasoningEffort;
 
     public PostingCleanupService(ChatClient.Builder builder,
             @Value("classpath:/prompts/posting.st") Resource postingPrompt,
-            @Value("classpath:/prompts/posting.schema.json") Resource postingSchema) {
+            @Value("classpath:/prompts/posting.schema.json") Resource postingSchema,
+            @Value("${cvchecker.llm.reasoning-effort:none}") String reasoningEffort) {
         this.chat = builder.build();
+        this.reasoningEffort = reasoningEffort;
         try {
             this.basePrompt = new String(postingPrompt.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             this.jsonSchema = new String(postingSchema.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -99,7 +102,7 @@ public class PostingCleanupService {
     }
 
     private OpenAiChatOptions.Builder jsonSchemaOptions() {
-        return OpenAiChatOptions.builder()
+        OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder()
                 .temperature(0.1)
                 .maxTokens(MAX_OUTPUT_TOKENS)
                 .responseFormat(OpenAiChatModel.ResponseFormat.builder()
@@ -107,6 +110,13 @@ public class PostingCleanupService {
                         .jsonSchema(jsonSchema)
                         .strict(true)
                         .build());
+        // Turning "thinking" off is the single biggest latency win for reasoning-capable local models
+        // (docs/DECISIONS.md): the structured JSON is short, so hidden reasoning tokens are pure cost.
+        // The builder mutates in place, so the fluent return value is intentionally ignored.
+        if (reasoningEffort != null && !reasoningEffort.isBlank()) {
+            builder.reasoningEffort(reasoningEffort);
+        }
+        return builder;
     }
 
     private static String truncate(String text) {

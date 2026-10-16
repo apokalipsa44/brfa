@@ -18,6 +18,11 @@ HARD RULES:
                         the title. Empty string when the posting states nothing usable>}
 - Never invent facts. Score and keywords must follow from what is actually written in the CV.
   Requirements from the posting that the CV lacks go into suggestions/missingKeywords, never into imagined experience.
+- matchScore: weigh the posting's requirements. Must-have requirements account for 70% of the score,
+  nice-to-have or optional ones 20%, soft skills and background 10%. When a must-have requirement is
+  missing, the score cannot exceed 50.
+- Treat industry-standard synonyms and acronyms as matches (e.g. "AWS" = "Amazon Web Services",
+  "JS" = "JavaScript"); such a requirement is matched, never missing.
 - A suggestion must propose how to reword or regroup facts that ARE in the CV — never add a skill,
   position or certificate the CV does not contain.
 - Write the summary and suggestions in the same language as the CV.

@@ -237,4 +237,41 @@ class AnalysisTest {
 
         assertThat(changes.get()).isEqualTo(2);
     }
+
+    /** A full re-run drops every stage result and returns to QUEUED, keeping user values (§4). */
+    @Test
+    void rerunResetsResultsAndKeepsUserValues() {
+        Analysis analysis = Analysis.fromUrl("a1", "cv.pdf", "CV text", "https://example.com/job", "qwen");
+        long token = analysis.attemptId();
+        analysis.attemptSetPosting(token, "Extracted posting", PostingSource.STATIC_HTML, false, "Acme", "Dev");
+        analysis.setEvaluation(new Evaluation("Acme", "Dev", 58, List.of("Java"), List.of("K8s"),
+                List.of(suggestion("Skills", Priority.HIGH)), "Fine.", "A backend role."));
+        analysis.rename("My title");
+        analysis.setApplied(LocalDate.of(2026, 10, 1));
+        analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
+
+        assertThat(analysis.resetForRerun()).isTrue();
+
+        assertThat(analysis.stage()).isEqualTo(AnalysisStage.QUEUED);
+        assertThat(analysis.progress()).isZero();
+        assertThat(analysis.score()).isNull();
+        assertThat(analysis.evaluation()).isNull();
+        assertThat(analysis.suggestions()).isEmpty();
+        assertThat(analysis.postingText()).isNull();
+        assertThat(analysis.title()).isEqualTo("My title");
+        assertThat(analysis.appliedAt()).isEqualTo(LocalDate.of(2026, 10, 1));
+        assertThat(analysis.attemptId()).isEqualTo(token + 1);
+    }
+
+    /** A pasted analysis cannot be re-run from its link (there is none); a running one must be cancelled first. */
+    @Test
+    void rerunIsRejectedForPastedOrRunningAnalyses() {
+        Analysis pasted = new Analysis("a1", "cv.pdf", "CV text", "posting", "qwen");
+        pasted.transition(AnalysisStage.AWAITING_REVIEW, 40);
+        assertThat(pasted.resetForRerun()).isFalse();
+
+        Analysis running = Analysis.fromUrl("a2", "cv.pdf", "CV text", "https://example.com/job", "qwen");
+        running.transition(AnalysisStage.EVALUATING, 15);
+        assertThat(running.resetForRerun()).isFalse();
+    }
 }

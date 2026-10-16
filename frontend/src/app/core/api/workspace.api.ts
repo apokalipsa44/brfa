@@ -58,6 +58,11 @@ export class WorkspaceApi {
     return this.http.post<AnalysisSummary>('/api/analyses', { jobPosting });
   }
 
+  /** Starts an analysis from a link; the server fetches the posting (docs/API.md §4). */
+  createAnalysisFromUrl(jobPostingUrl: string): Observable<AnalysisSummary> {
+    return this.http.post<AnalysisSummary>('/api/analyses', { jobPostingUrl });
+  }
+
   /** Partial update of the user title, description and/or the applied marker (docs/API.md §4). */
   updateAnalysis(id: string, patch: AnalysisPatch): Observable<AnalysisSummary> {
     return this.http.patch<AnalysisSummary>(`/api/analyses/${encodeURIComponent(id)}`, patch);
@@ -71,6 +76,16 @@ export class WorkspaceApi {
 
   retryAnalysis(id: string): Observable<AnalysisSummary> {
     return this.http.post<AnalysisSummary>(`/api/analyses/${encodeURIComponent(id)}/retry`, {});
+  }
+
+  /** Re-runs a link analysis from scratch, overwriting its results (docs/API.md §4). */
+  rerunAnalysis(id: string): Observable<AnalysisSummary> {
+    return this.http.post<AnalysisSummary>(`/api/analyses/${encodeURIComponent(id)}/rerun`, {});
+  }
+
+  /** Stops a queued or running analysis (docs/API.md §4); the worker's LLM call is aborted. */
+  cancelAnalysis(id: string): Observable<AnalysisSummary> {
+    return this.http.post<AnalysisSummary>(`/api/analyses/${encodeURIComponent(id)}/cancel`, {});
   }
 
   deleteAnalysis(id: string): Observable<void> {

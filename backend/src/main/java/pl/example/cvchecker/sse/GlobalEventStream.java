@@ -24,6 +24,7 @@ import tools.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 
 import pl.example.cvchecker.analysis.AnalysisDeletedEvent;
+import pl.example.cvchecker.analysis.AnalysisOutputEvent;
 import pl.example.cvchecker.analysis.AnalysisUpdatedEvent;
 
 /**
@@ -113,6 +114,12 @@ public class GlobalEventStream {
     }
 
     @EventListener
+    public void onAnalysisOutput(AnalysisOutputEvent event) {
+        publishTransient("analysis.output",
+                Map.of("analysisId", event.analysisId(), "stage", event.stage(), "delta", event.delta()));
+    }
+
+    @EventListener
     public void onModelsUpdated(ModelsUpdatedEvent event) {
         publish("models.updated", Map.of());
     }
@@ -137,6 +144,34 @@ public class GlobalEventStream {
                 replay.removeFirst();
             }
             dispatch(frame);
+        }
+    }
+
+    /**
+     * Fans a transient frame out to every open connection without buffering it and without an SSE id.
+     * Live LLM output is useful only while it is being generated: a reconnect must not replay it, and
+     * it must not advance {@code Last-Event-ID} past the buffered state events.
+     */
+    void publishTransient(String name, Object data) {
+        String json = serialize(name, data);
+        synchronized (lock) {
+            if (emitters.isEmpty()) return;
+            for (SseEmitter emitter : new ArrayList<>(emitters)) {
+                if (!sendTransient(emitter, name, json)) {
+                    emitters.remove(emitter);
+                }
+            }
+        }
+    }
+
+    /** Writes one id-less SSE frame; returns false when the client has gone away. */
+    private boolean sendTransient(SseEmitter emitter, String name, String json) {
+        try {
+            emitter.send(SseEmitter.event().name(name).data(json, MediaType.APPLICATION_JSON));
+            return true;
+        } catch (IOException | IllegalStateException e) {
+            log.debug("Global SSE client disconnected");
+            return false;
         }
     }
 

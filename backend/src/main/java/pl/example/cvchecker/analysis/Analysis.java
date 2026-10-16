@@ -342,6 +342,44 @@ public class Analysis {
         return true;
     }
 
+    /**
+     * Resets a link analysis for a full re-run (docs/API.md §4): drops every stage result (resolved
+     * posting text, evaluation, suggestions, applied changes, result file) and returns to
+     * QUEUED so the pipeline re-fetches the URL and re-evaluates. User values (title, description,
+     * applied date) are preserved. Increments the attempt id so the previous run can no longer write.
+     *
+     * @return true when the analysis was reset; false when it is not a link analysis or is currently
+     *         running (a working analysis must be cancelled first)
+     */
+    public boolean resetForRerun() {
+        synchronized (eventLock) {
+            if (sourceUrl == null || stage.isCancellable()) return false;
+            this.stage = AnalysisStage.QUEUED;
+            this.progress = 0;
+            this.score = null;
+            this.evaluation = null;
+            this.suggestions = List.of();
+            this.approvedSuggestionIds = null;
+            this.appliedChanges = null;
+            this.rewrittenDocument = null;
+            this.resultFile = null;
+            this.errorCode = null;
+            this.errorMessage = null;
+            this.failedStage = null;
+            this.interruptedStage = null;
+            this.stageMessage = null;
+            this.postingText = null;
+            this.postingSource = null;
+            this.postingTruncated = false;
+            this.postingEmployer = null;
+            this.postingPosition = null;
+            this.attemptId++;
+            this.updatedAt = Instant.now();
+        }
+        notifyChanged();
+        return true;
+    }
+
     private static int progressFor(AnalysisStage stage) {
         return switch (stage) {
             case QUEUED -> 0;

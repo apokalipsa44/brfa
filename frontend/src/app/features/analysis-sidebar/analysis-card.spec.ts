@@ -30,6 +30,7 @@ function makeSummary(overrides: Partial<AnalysisSummary> = {}): AnalysisSummary 
     (renamed)="renamed.set($event)"
     (appliedChanged)="applied.set($event)"
     (deleted)="deleted.set($event)"
+    (cancelled)="cancelled.set($event)"
   />`,
 })
 class Host {
@@ -38,6 +39,7 @@ class Host {
   readonly renamed = signal<{ id: string; title: string } | null>(null);
   readonly applied = signal<{ id: string; applied: boolean } | null>(null);
   readonly deleted = signal<string | null>(null);
+  readonly cancelled = signal<string | null>(null);
 }
 
 describe('AnalysisCard', () => {
@@ -119,5 +121,18 @@ describe('AnalysisCard', () => {
     expect(fixture.nativeElement.querySelector('.animate-spin')).toBeTruthy();
     expect(fixture.nativeElement.textContent).not.toContain('A backend role');
     expect(fixture.nativeElement.querySelector('button[aria-pressed]')).toBeNull();
+  });
+
+  it('offers a stop button on a working analysis that emits its id', () => {
+    host.summary.set(makeSummary({ stage: 'EVALUATING', score: null, shortDescription: null }));
+    fixture.detectChanges();
+
+    const stop = fixture.nativeElement.querySelector(
+      'button[aria-label="Cancel analysis"]',
+    ) as HTMLButtonElement;
+    expect(stop).toBeTruthy();
+    stop.click();
+
+    expect(host.cancelled()).toBe('a1');
   });
 });

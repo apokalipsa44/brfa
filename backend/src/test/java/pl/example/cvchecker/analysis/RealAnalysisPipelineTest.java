@@ -4,10 +4,12 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 import pl.example.cvchecker.llm.CvRewriteService;
 import pl.example.cvchecker.llm.Evaluation;
 import pl.example.cvchecker.llm.EvaluationService;
+import pl.example.cvchecker.llm.LlmTokenSink;
 import pl.example.cvchecker.llm.Priority;
 import pl.example.cvchecker.llm.Suggestion;
 import pl.example.cvchecker.pdf.CvPdfRenderer;
@@ -47,15 +49,16 @@ class RealAnalysisPipelineTest {
             return null;
         }).when(runs).submit(any(), any());
         pipeline = new RealAnalysisPipeline(evaluationService, mock(CvRewriteService.class),
-                mock(CvPdfRenderer.class), new TempFileStorage(), runs, resolver);
+                mock(CvPdfRenderer.class), new TempFileStorage(), runs, resolver,
+                mock(ApplicationEventPublisher.class));
     }
 
     @Test
     void linkAnalysisFetchesThePostingBeforeEvaluation() throws Exception {
         when(resolver.resolve("https://example.com/job", "qwen")).thenReturn(
                 new ResolvedPosting("Backend developer wanted", PostingSource.JSON_LD, false, "Acme", "Dev"));
-        when(evaluationService.evaluate(eq("cv text"), eq("Backend developer wanted"), eq("qwen")))
-                .thenReturn(evaluation());
+        when(evaluationService.evaluate(eq("cv text"), eq("Backend developer wanted"), eq("qwen"),
+                any(LlmTokenSink.class))).thenReturn(evaluation());
         Analysis analysis = Analysis.fromUrl("a1", "cv.pdf", "cv text", "https://example.com/job", "qwen");
 
         pipeline.start(analysis);
@@ -64,7 +67,8 @@ class RealAnalysisPipelineTest {
         assertThat(analysis.postingText()).isEqualTo("Backend developer wanted");
         assertThat(analysis.postingSource()).isEqualTo(PostingSource.JSON_LD);
         assertThat(analysis.title()).isEqualTo("Acme · Dev");
-        verify(evaluationService).evaluate("cv text", "Backend developer wanted", "qwen");
+        verify(evaluationService).evaluate(eq("cv text"), eq("Backend developer wanted"), eq("qwen"),
+                any(LlmTokenSink.class));
     }
 
     @Test
@@ -79,13 +83,13 @@ class RealAnalysisPipelineTest {
         assertThat(analysis.errorCode()).isEqualTo("POSTING_NOT_FOUND");
         assertThat(analysis.resetForRetry()).isTrue();
         assertThat(analysis.stage()).isEqualTo(AnalysisStage.FETCHING_POSTING);
-        verify(evaluationService, never()).evaluate(any(), any(), any());
+        verify(evaluationService, never()).evaluate(any(), any(), any(), any());
     }
 
     @Test
     void pastedAnalysisSkipsTheFetch() throws Exception {
-        when(evaluationService.evaluate(eq("cv text"), eq("pasted posting"), eq("qwen")))
-                .thenReturn(evaluation());
+        when(evaluationService.evaluate(eq("cv text"), eq("pasted posting"), eq("qwen"),
+                any(LlmTokenSink.class))).thenReturn(evaluation());
         Analysis analysis = new Analysis("a1", "cv.pdf", "cv text", "pasted posting", "qwen");
 
         pipeline.start(analysis);

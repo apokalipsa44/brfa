@@ -22,7 +22,7 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
 /**
  * Analysis detail (docs/API.md §4): inline-editable title, step indicator, and the three stages —
  * progress, the review of approved changes, and the result. Failures map an error code to friendly
- * copy with a Retry that re-runs the failed stage.
+ * copy with a Retry that re-runs the failed stage; a working analysis can be cancelled in place.
  */
 @Component({
   selector: 'app-analysis-detail',
@@ -138,6 +138,31 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
           }
         </div>
 
+        <!-- Source link: the posting the analysis used, with a full re-run (docs/API.md §4). -->
+        @if (analysis.sourceUrl; as url) {
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <a
+              [href]="url"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open the job posting link in a new tab"
+              class="inline-flex min-w-0 items-center gap-1 text-sm text-indigo-600 transition-colors duration-150 hover:text-indigo-700 hover:underline focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+            >
+              <span aria-hidden="true">↗</span>
+              <span class="truncate">{{ url }}</span>
+            </a>
+            <button
+              type="button"
+              class="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors duration-150 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="working()"
+              title="Fetch the posting again and re-run the whole analysis"
+              (click)="checkAgain(analysis)"
+            >
+              Check again
+            </button>
+          </div>
+        }
+
         <div class="mt-4">
           <app-step-indicator [stage]="analysis.stage" [failedStage]="failedStage()" />
         </div>
@@ -150,6 +175,18 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
               [progress]="analysis.progress"
               [message]="analysis.stageMessage ?? null"
             />
+            @if (liveOutput(analysis.id); as live) {
+              <pre
+                class="mt-3 max-h-40 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed break-words whitespace-pre-wrap text-slate-500"
+              >{{ live }}</pre>
+            }
+            <button
+              type="button"
+              class="mt-3 inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-700 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:outline-none"
+              (click)="cancel(analysis)"
+            >
+              Cancel analysis
+            </button>
           </div>
         }
 
@@ -343,6 +380,11 @@ export class AnalysisDetail {
 
   protected readonly selectedCount = computed(() => this.selectedIds().size);
 
+  /** Live streamed LLM output for an analysis (docs/API.md §7), or an empty string when idle. */
+  protected liveOutput(id: string): string {
+    return this.analyses.liveOutput()[id] ?? '';
+  }
+
   /** The stage a FAILED analysis stopped in (docs/API.md §5), for the step indicator. */
   protected readonly failedStage = computed<AnalysisStage | null>(() => {
     const analysis = this.detail();
@@ -451,6 +493,19 @@ export class AnalysisDetail {
     this.selectedIds.set(new Set());
     this.lastInitKey.set('');
     this.analyses.retry(analysis.id);
+  }
+
+  /** Re-runs a link analysis from scratch, overwriting its previous results (docs/API.md §4). */
+  checkAgain(analysis: Detail): void {
+    if (this.working()) return;
+    this.selectedIds.set(new Set());
+    this.lastInitKey.set('');
+    this.analyses.rerun(analysis.id);
+  }
+
+  /** Stops the running analysis from the detail view (docs/API.md §4). */
+  cancel(analysis: Detail): void {
+    this.analyses.cancel(analysis.id);
   }
 
   protected readonly formatDateTime = formatDateTime;
