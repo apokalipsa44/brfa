@@ -1,0 +1,34 @@
+# Runs the CV checker locally in Docker while using the LM Studio instance that is
+# already running on the host (LM Studio is NOT containerised). Copy `.env.example`
+# to `.env` and set LLM_MODEL (or pick a model in the UI).
+services:
+  backend:
+    build: ./backend
+    image: cvchecker-backend
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      LLM_MODEL: ${LLM_MODEL:-unconfigured}
+      # host.docker.internal reaches the host's LM Studio (see extra_hosts below)
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+      LM_STUDIO_BASE_URL: ${LM_STUDIO_BASE_URL:-http://host.docker.internal:1234}
+      CV_DB_PATH: /app/data/cvchecker.db
+    volumes:
+      - backend-data:/app/data
+    extra_hosts:
+      # makes host.docker.internal resolve to the host on Linux too
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: cvchecker-frontend
+    ports:
+      - "${FRONTEND_PORT:-4200}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  # persists the SQLite database across container rebuilds/restarts
+  backend-data:

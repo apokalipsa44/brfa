@@ -98,6 +98,20 @@ describe('AnalysisCard', () => {
     expect(host.renamed()).toEqual({ id: 'a1', title: 'Interview at Globex' });
   });
 
+  it('deletes directly from the card, with no options menu', () => {
+    expect(
+      fixture.nativeElement.querySelector('button[aria-label="Actions for analysis"]'),
+    ).toBeNull();
+
+    const remove = fixture.nativeElement.querySelector(
+      'button[aria-label="Delete analysis"]',
+    ) as HTMLButtonElement;
+    expect(remove).toBeTruthy();
+    remove.click();
+
+    expect(host.deleted()).toBe('a1');
+  });
+
   it('renders a compact row (no score or description) while working', () => {
     host.summary.set(makeSummary({ stage: 'EVALUATING', score: null, shortDescription: null }));
     fixture.detectChanges();

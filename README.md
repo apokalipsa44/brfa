@@ -47,6 +47,28 @@ npm run start
 
 Open http://localhost:4200.
 
+## Run with Docker
+
+The whole app (backend + frontend/nginx) can run in Docker while using the LM Studio
+instance already running on the host — LM Studio itself is **not** containerised.
+
+Prerequisites:
+
+- Docker with the Compose plugin.
+- LM Studio running with a model loaded, and **"Serve on Local Network" enabled** in its
+  server settings so it binds `0.0.0.0:1234` (a container cannot reach the host's `127.0.0.1`).
+
+```bash
+cp .env.example .env        # set LLM_MODEL to your loaded model id
+docker compose up --build   # frontend :4200, backend :8080
+```
+
+Containers reach LM Studio through `host.docker.internal` (mapped to the host via
+`extra_hosts: host-gateway`, so this works on Linux too). The SQLite database is kept in
+the named volume `backend-data`, so analyses survive `docker compose down`/rebuild
+(`docker compose down -v` wipes them). Stop the local dev servers first if they already
+hold ports 8080/4200, or override them with `BACKEND_PORT`/`FRONTEND_PORT` in `.env`.
+
 ## Tests and checks
 
 ```bash

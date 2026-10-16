@@ -10,8 +10,8 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
 /**
  * One sidebar card (docs/API.md §4). Working analyses get a compact row (title or placeholder,
  * spinner, stage); finished ones get a card with the title, the evaluation's short description and a
- * status line. The select control stretches over the card; the score, the rename pencil, the actions
- * menu and the applied marker live in a reserved right-hand column so they never sit under the text.
+ * status line. The select control stretches over the card; the score, the rename pencil, the delete
+ * button and the applied marker live in a reserved right-hand column so they never sit under the text.
  */
 @Component({
   selector: 'app-analysis-card',
@@ -84,38 +84,15 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
                 <span aria-hidden="true">✎</span>
               </button>
 
-              <div class="relative">
-                <button
-                  type="button"
-                  class="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
-                  aria-label="Actions for analysis"
-                  [attr.aria-expanded]="menuOpen()"
-                  (click)="menuOpen.set(!menuOpen())"
-                  (keydown.escape)="menuOpen.set(false)"
-                >
-                  <span aria-hidden="true">⋯</span>
-                </button>
-
-                @if (menuOpen()) {
-                  <button
-                    type="button"
-                    class="fixed inset-0 z-10 cursor-default"
-                    aria-label="Close actions menu"
-                    (click)="menuOpen.set(false)"
-                  ></button>
-                  <div
-                    class="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
-                  >
-                    <button
-                      type="button"
-                      class="block w-full px-3 py-1.5 text-left text-sm text-red-700 hover:bg-red-50"
-                      (click)="deleted.emit(summary().id); menuOpen.set(false)"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                }
-              </div>
+              <button
+                type="button"
+                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+                aria-label="Delete analysis"
+                title="Delete"
+                (click)="deleted.emit(summary().id)"
+              >
+                <span aria-hidden="true">🗑</span>
+              </button>
             </div>
 
             @if (showApplied()) {
@@ -152,7 +129,6 @@ export class AnalysisCard {
   readonly appliedChanged = output<{ id: string; applied: boolean }>();
   readonly deleted = output<string>();
 
-  protected readonly menuOpen = signal(false);
   protected readonly editing = signal(false);
 
   protected readonly compact = computed(() => isWorking(this.summary().stage));
@@ -193,7 +169,6 @@ export class AnalysisCard {
   });
 
   protected startRename(): void {
-    this.menuOpen.set(false);
     this.editing.set(true);
   }
 
