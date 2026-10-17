@@ -22,12 +22,12 @@ class AnalysisTest {
 
     private static Suggestion suggestion(String section, Priority priority) {
         return new Suggestion(section, "problem " + section, "proposal " + section,
-                "before", "after", priority);
+                "before", "after", priority, false);
     }
 
     private static Analysis awaitingReview() {
         Analysis analysis = new Analysis("a1", "cv.pdf", "CV text", "posting", "qwen", Instant.parse("2026-10-12T10:00:00Z"));
-        analysis.setEvaluation(new Evaluation("Acme", "Senior Java Developer", 58,
+        analysis.setEvaluation(new Evaluation("Acme", "Senior Java Developer", List.of(), 58,
                 List.of("Java"), List.of("Kubernetes"), List.of(suggestion("Skills", Priority.HIGH)), "Fine.",
                 "A backend role."));
         analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
@@ -37,7 +37,7 @@ class AnalysisTest {
     @Test
     void suggestionIdsAreIssuedByTheBackend() {
         Analysis analysis = new Analysis("a1", "cv.pdf", "CV text", "posting", "qwen");
-        analysis.setEvaluation(new Evaluation("Acme", "Dev", 50, List.of(), List.of(),
+        analysis.setEvaluation(new Evaluation("Acme", "Dev", List.of(), 50, List.of(), List.of(),
                 List.of(suggestion("Skills", Priority.HIGH), suggestion("Summary", Priority.LOW)), "ok", null));
 
         assertThat(analysis.suggestions()).extracting(AnalysisSuggestion::id).containsExactly("s1", "s2");
@@ -62,7 +62,7 @@ class AnalysisTest {
         Analysis analysis = awaitingReview();
         analysis.rename("Interview at Globex");
         // A re-evaluation (e.g. after a retry) must not overwrite the user's title.
-        analysis.setEvaluation(new Evaluation("Initech", "Full Stack", 80,
+        analysis.setEvaluation(new Evaluation("Initech", "Full Stack", List.of(), 80,
                 List.of(), List.of(), List.of(suggestion("Skills", Priority.HIGH)), "ok", null));
 
         assertThat(analysis.title()).isEqualTo("Interview at Globex");
@@ -71,7 +71,7 @@ class AnalysisTest {
     @Test
     void applyReturnsOnlyTheApprovedSuggestions() {
         Analysis analysis = new Analysis("a1", "cv.pdf", "CV text", "posting", "qwen");
-        analysis.setEvaluation(new Evaluation("Acme", "Dev", 50, List.of(), List.of(),
+        analysis.setEvaluation(new Evaluation("Acme", "Dev", List.of(), 50, List.of(), List.of(),
                 List.of(suggestion("Skills", Priority.HIGH), suggestion("Summary", Priority.MEDIUM)), "ok", null));
         analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
 
@@ -217,7 +217,7 @@ class AnalysisTest {
         analysis.fail("LLM_INVALID_OUTPUT", "boom", AnalysisStage.EVALUATING);
 
         analysis.resetForRetry();
-        analysis.setEvaluation(new Evaluation("Acme", "Dev", 70, List.of(), List.of(),
+        analysis.setEvaluation(new Evaluation("Acme", "Dev", List.of(), 70, List.of(), List.of(),
                 List.of(suggestion("Skills", Priority.HIGH)), "ok", "role"));
         analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
 
@@ -244,7 +244,7 @@ class AnalysisTest {
         Analysis analysis = Analysis.fromUrl("a1", "cv.pdf", "CV text", "https://example.com/job", "qwen");
         long token = analysis.attemptId();
         analysis.attemptSetPosting(token, "Extracted posting", PostingSource.STATIC_HTML, false, "Acme", "Dev");
-        analysis.setEvaluation(new Evaluation("Acme", "Dev", 58, List.of("Java"), List.of("K8s"),
+        analysis.setEvaluation(new Evaluation("Acme", "Dev", List.of(), 58, List.of("Java"), List.of("K8s"),
                 List.of(suggestion("Skills", Priority.HIGH)), "Fine.", "A backend role."));
         analysis.rename("My title");
         analysis.setApplied(LocalDate.of(2026, 10, 1));

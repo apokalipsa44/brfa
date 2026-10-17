@@ -26,9 +26,8 @@ const PRIORITY_TONE: Record<Priority, string> = {
     <ul class="flex flex-col gap-2">
       @for (suggestion of suggestions(); track suggestion.id) {
         <li
-          class="rounded-xl border border-slate-200 bg-white p-3"
-          [class.ring-1]="isSelected(suggestion.id)"
-          [class.ring-indigo-500]="isSelected(suggestion.id)"
+          class="rounded-xl border border-slate-200 bg-white p-3 data-[selected=true]:ring-1 data-[selected=true]:ring-indigo-500"
+          [attr.data-selected]="isSelected(suggestion.id)"
         >
           <label class="flex cursor-pointer items-start gap-3">
             <input
@@ -50,6 +49,12 @@ const PRIORITY_TONE: Record<Priority, string> = {
               </span>
               <span class="mt-1 block text-sm text-slate-600">{{ suggestion.problem }}</span>
               <span class="mt-1 block text-sm text-slate-700">{{ suggestion.proposal }}</span>
+
+              @if (suggestion.needsConfirmation) {
+                <span class="mt-1 block text-xs font-medium text-amber-700">
+                  ⚠ Review the wording — it mentions something not found in your CV.
+                </span>
+              }
 
               @if (hasTextPair(suggestion)) {
                 <span class="mt-2 flex min-w-0 flex-col gap-1 text-xs">

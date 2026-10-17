@@ -18,11 +18,8 @@ import { CvContextStore } from '../../core/cv-context.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div
-      class="rounded-xl border-2 border-dashed p-10 text-center transition-colors duration-200"
-      [class.border-indigo-400]="dragOver()"
-      [class.bg-indigo-50]="dragOver()"
-      [class.border-slate-300]="!dragOver()"
-      [class.bg-white]="!dragOver()"
+      class="rounded-xl border-2 border-dashed border-slate-300 bg-white p-10 text-center transition-colors duration-200 data-[drag-over=true]:border-indigo-400 data-[drag-over=true]:bg-indigo-50"
+      [attr.data-drag-over]="dragOver()"
       (dragover)="onDragOver($event)"
       (dragleave)="dragOver.set(false)"
       (drop)="onDrop($event)"

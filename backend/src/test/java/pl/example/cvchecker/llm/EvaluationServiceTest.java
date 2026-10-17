@@ -62,7 +62,7 @@ class EvaluationServiceTest {
         Evaluation good = evaluation(58);
         when(call.entity(Evaluation.class)).thenReturn(good);
 
-        assertThat(service.evaluate("cv", "job", null)).isEqualTo(good);
+        assertThat(service.evaluate("Docker Kubernetes", "job", null)).isEqualTo(good);
     }
 
     @Test
@@ -105,14 +105,14 @@ class EvaluationServiceTest {
         assertThatThrownBy(() -> service.validate(evaluation(-1))).isInstanceOf(LlmInvalidOutputException.class);
         assertThatThrownBy(() -> service.validate(evaluation(101))).isInstanceOf(LlmInvalidOutputException.class);
         assertThatThrownBy(() -> service.validate(null)).isInstanceOf(LlmInvalidOutputException.class);
-        assertThatThrownBy(() -> service.validate(new Evaluation("Acme", "Dev", 50, List.of(), List.of(), List.of(), "  ", null)))
+        assertThatThrownBy(() -> service.validate(new Evaluation("Acme", "Dev", List.of(), 50, List.of(), List.of(), List.of(), "  ", null)))
                 .isInstanceOf(LlmInvalidOutputException.class);
     }
 
     @Test
     void validationRejectsSuggestionWithoutProposal() {
-        Evaluation broken = new Evaluation("Acme", "Dev", 50, List.of("Java"), List.of(),
-                List.of(new Suggestion("Skills", "problem", "  ", "", "", Priority.HIGH)), "match", null);
+        Evaluation broken = new Evaluation("Acme", "Dev", List.of(), 50, List.of("Java"), List.of(),
+                List.of(new Suggestion("Skills", "problem", "  ", "", "", Priority.HIGH, false)), "match", null);
         assertThatThrownBy(() -> service.validate(broken)).isInstanceOf(LlmInvalidOutputException.class);
     }
 
@@ -131,7 +131,7 @@ class EvaluationServiceTest {
 
     @Test
     void evaluateReturnsACleanedShortDescription() {
-        Evaluation dirty = new Evaluation("Acme", "Dev", 60, List.of("Java"), List.of(),
+        Evaluation dirty = new Evaluation("Acme", "Dev", List.of(), 60, List.of("Java"), List.of(),
                 List.of(), "ok", "   Backend role in Java.   ");
         when(call.entity(Evaluation.class)).thenReturn(dirty);
 
@@ -139,9 +139,9 @@ class EvaluationServiceTest {
     }
 
     private static Evaluation evaluation(int score) {
-        return new Evaluation("Acme", "Senior Java Developer", score, List.of("Java"), List.of("Kubernetes"),
+        return new Evaluation("Acme", "Senior Java Developer", List.of(), score, List.of("Java"), List.of("Terraform"),
                 List.of(new Suggestion("Skills", "Missing K8s", "Group existing container skills",
-                        "Docker", "Docker, Kubernetes (basics)", Priority.MEDIUM)),
+                        "Docker", "Docker Kubernetes", Priority.MEDIUM, false)),
                 "Solid match.", "A backend role using Java and Kubernetes.");
     }
 }

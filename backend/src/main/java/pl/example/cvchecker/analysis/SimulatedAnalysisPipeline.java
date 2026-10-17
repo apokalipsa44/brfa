@@ -13,6 +13,9 @@ import pl.example.cvchecker.llm.CvChange;
 import pl.example.cvchecker.llm.CvDocument;
 import pl.example.cvchecker.llm.Evaluation;
 import pl.example.cvchecker.llm.Priority;
+import pl.example.cvchecker.llm.Requirement;
+import pl.example.cvchecker.llm.RequirementStatus;
+import pl.example.cvchecker.llm.RequirementType;
 import pl.example.cvchecker.llm.Suggestion;
 import pl.example.cvchecker.pdf.CvPdfRenderer;
 import pl.example.cvchecker.storage.TempFileStorage;
@@ -114,11 +117,15 @@ public class SimulatedAnalysisPipeline implements AnalysisPipeline {
     }
 
     private static Evaluation evaluation() {
-        return new Evaluation("Acme", "Senior Java Developer", 58,
+        return new Evaluation("Acme", "Senior Java Developer",
+                List.of(new Requirement("Java", RequirementType.MUST, RequirementStatus.MET, "Java"),
+                        new Requirement("Spring Boot", RequirementType.MUST, RequirementStatus.MET, "Spring Boot"),
+                        new Requirement("Kubernetes", RequirementType.NICE, RequirementStatus.MISSING, "")),
+                58,
                 List.of("Java", "Spring Boot"), List.of("Kubernetes", "Terraform"),
                 List.of(new Suggestion("Skills", "The posting asks for Kubernetes but the CV mentions Docker only.",
                         "Group the existing container keywords so the skills list covers Kubernetes-related terms already present.",
-                        "Docker, CI/CD", "Docker, Kubernetes (basics), CI/CD", Priority.HIGH)),
+                        "Docker, CI/CD", "Docker, Kubernetes (basics), CI/CD", Priority.HIGH, false)),
                 "The CV matches the core stack but lacks container-orchestration keywords.",
                 "Backend role building payment APIs in Java and Spring Boot on a small platform team.");
     }

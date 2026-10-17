@@ -28,6 +28,9 @@ public class EvaluationService {
     /** Hard cap for the evaluation's short description, cut at a word boundary (docs/API.md §6.4). */
     static final int MAX_SHORT_DESCRIPTION_CHARS = 200;
 
+    /** Filled per call with the detected CV language (prompts/analyze.st LANGUAGE). */
+    private static final String CV_LANGUAGE_PLACEHOLDER = "{{CV_LANGUAGE}}";
+
     private final ChatClient chat;
     private final String basePrompt;
     private final String jsonSchema;
@@ -68,7 +71,10 @@ public class EvaluationService {
     public Evaluation evaluate(String cvText, String jobDescription, String model, LlmTokenSink sink) {
         // Shared context first, instructions after: the CV + posting block is byte-identical to the
         // rewrite step's, so the backend can reuse its KV cache across the two calls (SharedContext).
-        String prompt = SharedContext.of(cvText, jobDescription) + basePrompt;
+        // The instruction block only changes the CV_LANGUAGE sentence, which sits after the shared
+        // prefix and therefore does not disturb the cacheable tokens.
+        String instructions = basePrompt.replace(CV_LANGUAGE_PLACEHOLDER, CvLanguage.instructionFor(cvText));
+        String prompt = SharedContext.of(cvText, jobDescription) + instructions;
         Exception lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             if (Thread.currentThread().isInterrupted()) {
@@ -83,7 +89,9 @@ public class EvaluationService {
                 ChatClient.ChatClientRequestSpec request = chat.prompt().user(userPrompt).options(options);
                 Evaluation evaluation = caller.call(request, Evaluation.class, sink);
                 validate(evaluation);
-                return withCleanDescription(evaluation);
+                // Deterministic checks (prompts/analyze.st "Checks in code"): recompute the score,
+                // repair the keyword lists and drop/flag suggestions the CV cannot support.
+                return withCleanDescription(EvaluationSanitizer.sanitize(evaluation, cvText));
             } catch (LlmInvalidOutputException e) {
                 lastError = e;
                 log.warn("LLM evaluation attempt {}/{} produced invalid output", attempt, MAX_ATTEMPTS);
@@ -106,6 +114,7 @@ public class EvaluationService {
     void validate(Evaluation evaluation) {
         if (evaluation == null
                 || evaluation.matchScore() < 0 || evaluation.matchScore() > 100
+                || evaluation.requirements() == null
                 || evaluation.matchedKeywords() == null
                 || evaluation.missingKeywords() == null
                 || evaluation.suggestions() == null
@@ -127,9 +136,9 @@ public class EvaluationService {
         if (java.util.Objects.equals(cleaned, evaluation.shortDescription())) {
             return evaluation;
         }
-        return new Evaluation(evaluation.employer(), evaluation.position(), evaluation.matchScore(),
-                evaluation.matchedKeywords(), evaluation.missingKeywords(), evaluation.suggestions(),
-                evaluation.summary(), cleaned);
+        return new Evaluation(evaluation.employer(), evaluation.position(), evaluation.requirements(),
+                evaluation.matchScore(), evaluation.matchedKeywords(), evaluation.missingKeywords(),
+                evaluation.suggestions(), evaluation.summary(), cleaned);
     }
 
     /**

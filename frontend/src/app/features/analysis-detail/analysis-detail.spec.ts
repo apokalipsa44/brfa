@@ -20,6 +20,7 @@ const SUGGESTIONS: Suggestion[] = [
     before: 'Docker',
     after: 'Docker, Kubernetes',
     priority: 'HIGH',
+    needsConfirmation: false,
   },
   {
     id: 's2',
@@ -29,6 +30,7 @@ const SUGGESTIONS: Suggestion[] = [
     before: '',
     after: '',
     priority: 'MEDIUM',
+    needsConfirmation: false,
   },
   {
     id: 's3',
@@ -38,6 +40,7 @@ const SUGGESTIONS: Suggestion[] = [
     before: 'English',
     after: 'English (C1)',
     priority: 'LOW',
+    needsConfirmation: false,
   },
 ];
 
@@ -55,6 +58,7 @@ function detailResponse(overrides: Partial<Detail> = {}): Detail {
     modelId: 'qwen/iq3_s.gguf',
     sourceUrl: null,
     summary: 'Good stack fit.',
+    requirements: [],
     matchedKeywords: ['Java'],
     missingKeywords: ['Kubernetes'],
     suggestions: SUGGESTIONS,
@@ -97,6 +101,15 @@ describe('AnalysisDetail review', () => {
     const found = buttons.find((button) => button.textContent?.includes(label));
     if (!found) throw new Error(`button "${label}" not found`);
     return found;
+  }
+
+  function stepButton(index: number): HTMLButtonElement {
+    const label = ['Match', 'Review changes', 'Improved CV'][index];
+    const button = fixture.nativeElement.querySelector(
+      `button[aria-label="Go to step ${index + 1}: ${label}"]`,
+    ) as HTMLButtonElement;
+    if (!button) throw new Error(`step ${index + 1} button not found`);
+    return button;
   }
 
   beforeEach(async () => {
@@ -293,5 +306,46 @@ describe('AnalysisDetail review', () => {
 
     expect(fixture.nativeElement.querySelector('a[href^="http"]')).toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('Check again');
+  });
+
+  it('lets the user open the earlier steps from the indicator', () => {
+    selectAnalysis();
+
+    // AWAITING_REVIEW opens on the review step; the match result is a click away.
+    expect(fixture.nativeElement.textContent).not.toContain('Match score');
+    expect(buttonFor('Apply selected changes')).toBeTruthy();
+
+    stepButton(0).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Match score');
+    expect(fixture.nativeElement.textContent).not.toContain('Apply selected changes');
+
+    stepButton(1).click();
+    fixture.detectChanges();
+    expect(buttonFor('Apply selected changes')).toBeTruthy();
+  });
+
+  it('re-opens finished steps read-only once completed', () => {
+    selectAnalysis({
+      stage: 'COMPLETED',
+      progress: 100,
+      resultUrl: '/api/analyses/a1/result',
+      appliedChanges: [
+        { section: 'Skills', before: 'Docker', after: 'Docker, Kubernetes', reason: 'keyword' },
+      ],
+    });
+
+    // Defaults to the improved CV step.
+    expect(fixture.nativeElement.querySelector('a[download]')).toBeTruthy();
+
+    stepButton(0).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Match score');
+
+    stepButton(1).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Suggested changes');
+    // Finished steps are read-only: no approval controls.
+    expect(fixture.nativeElement.textContent).not.toContain('Apply selected changes');
   });
 });

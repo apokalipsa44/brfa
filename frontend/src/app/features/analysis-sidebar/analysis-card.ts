@@ -20,12 +20,8 @@ import { ScoreBadge } from '../../shared/score-badge/score-badge';
   host: { role: 'listitem' },
   template: `
     <div
-      class="group relative rounded-xl border p-3.5 transition-colors duration-150"
-      [class.border-indigo-500]="isSelected()"
-      [class.bg-indigo-50]="isSelected()"
-      [class.border-slate-200]="!isSelected()"
-      [class.bg-white]="!isSelected()"
-      [class.hover:border-slate-300]="!isSelected()"
+      class="group relative rounded-xl border border-slate-200 bg-white p-3.5 transition-colors duration-150 data-[selected=false]:hover:border-slate-300 data-[selected=true]:border-indigo-500 data-[selected=true]:bg-indigo-50"
+      [attr.data-selected]="isSelected()"
     >
       <div class="flex items-stretch gap-3">
         <button

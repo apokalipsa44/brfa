@@ -18,6 +18,21 @@ export type AnalysisStage =
 
 export type Priority = 'HIGH' | 'MEDIUM' | 'LOW';
 
+/** How important a posting requirement is (docs/API.md §4). */
+export type RequirementType = 'MUST' | 'NICE' | 'SOFT';
+
+/** How well the CV covers a posting requirement (docs/API.md §4). */
+export type RequirementStatus = 'MET' | 'PARTIAL' | 'MISSING';
+
+/** One posting requirement and how the CV covers it (docs/API.md §4). */
+export interface Requirement {
+  text: string;
+  type: RequirementType;
+  status: RequirementStatus;
+  /** Verbatim CV quote for MET/PARTIAL requirements; empty string for MISSING. */
+  cvEvidence: string;
+}
+
 /** Analysis summary (docs/API.md §4): list entry, analysis.updated payload, PATCH/POST response. */
 export interface AnalysisSummary {
   id: string;
@@ -46,6 +61,8 @@ export interface Suggestion {
   before: string;
   after: string;
   priority: Priority;
+  /** True when the proposed text mentions words absent from the CV; the UI leaves it unchecked. */
+  needsConfirmation: boolean;
 }
 
 /** One change stage 2 actually applied to the CV. */
@@ -62,6 +79,7 @@ export interface AnalysisDetail extends AnalysisSummary {
   /** The link the user provided, or null for a pasted posting (docs/API.md §4). */
   sourceUrl: string | null;
   summary: string | null;
+  requirements: Requirement[];
   matchedKeywords: string[];
   missingKeywords: string[];
   suggestions: Suggestion[];

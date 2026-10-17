@@ -14,16 +14,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
     <ul class="flex flex-wrap gap-1.5">
       @for (keyword of keywords(); track keyword) {
         <li
-          class="rounded-full border px-2 py-0.5 text-xs"
-          [class.border-emerald-200]="tone() === 'matched'"
-          [class.bg-emerald-50]="tone() === 'matched'"
-          [class.text-emerald-700]="tone() === 'matched'"
-          [class.border-slate-200]="tone() === 'neutral'"
-          [class.bg-slate-50]="tone() === 'neutral'"
-          [class.text-slate-600]="tone() === 'neutral'"
-          [class.border-amber-200]="tone() === 'missing'"
-          [class.bg-amber-50]="tone() === 'missing'"
-          [class.text-amber-700]="tone() === 'missing'"
+          class="rounded-full border px-2 py-0.5 text-xs data-[tone=matched]:border-emerald-200 data-[tone=matched]:bg-emerald-50 data-[tone=matched]:text-emerald-700 data-[tone=neutral]:border-slate-200 data-[tone=neutral]:bg-slate-50 data-[tone=neutral]:text-slate-600 data-[tone=missing]:border-amber-200 data-[tone=missing]:bg-amber-50 data-[tone=missing]:text-amber-700"
+          [attr.data-tone]="tone()"
         >
           {{ keyword }}
         </li>

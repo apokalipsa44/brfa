@@ -99,8 +99,8 @@ class RealAnalysisPipelineTest {
     }
 
     private static Evaluation evaluation() {
-        return new Evaluation("Acme", "Dev", 50, List.of(), List.of(),
-                List.of(new Suggestion("Skills", "problem", "proposal", "before", "after", Priority.MEDIUM)),
+        return new Evaluation("Acme", "Dev", List.of(), 50, List.of(), List.of(),
+                List.of(new Suggestion("Skills", "problem", "proposal", "before", "after", Priority.MEDIUM, false)),
                 "summary", null);
     }
 }

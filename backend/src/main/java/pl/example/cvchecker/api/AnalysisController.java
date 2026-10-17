@@ -135,6 +135,7 @@ public class AnalysisController {
                 analysis.createdAt(), analysis.updatedAt(), analysis.modelId(), analysis.errorCode(),
                 analysis.errorMessage(),
                 analysis.sourceUrl(), analysis.postingText(), analysis.postingSource(), analysis.postingTruncated(),
+                evaluation == null || evaluation.requirements() == null ? List.of() : evaluation.requirements(),
                 evaluation == null ? null : evaluation.summary(),
                 evaluation == null ? List.of() : evaluation.matchedKeywords(),
                 evaluation == null ? List.of() : evaluation.missingKeywords(),

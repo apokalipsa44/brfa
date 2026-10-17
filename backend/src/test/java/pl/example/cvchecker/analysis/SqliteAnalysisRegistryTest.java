@@ -52,9 +52,9 @@ class SqliteAnalysisRegistryTest {
     }
 
     private static Evaluation evaluation() {
-        return new Evaluation("Acme", "Senior Java Developer", 58, List.of("Java"), List.of("Kubernetes"),
+        return new Evaluation("Acme", "Senior Java Developer", List.of(), 58, List.of("Java"), List.of("Kubernetes"),
                 List.of(new Suggestion("Skills", "Missing K8s", "Group container skills", "Docker",
-                        "Docker, Kubernetes (basics)", Priority.HIGH)),
+                        "Docker, Kubernetes (basics)", Priority.HIGH, false)),
                 "Solid match.", "Payment APIs in Java on a small team.");
     }
 

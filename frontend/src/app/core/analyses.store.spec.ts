@@ -32,6 +32,7 @@ function detail(id: string, overrides: Partial<AnalysisDetail> = {}): AnalysisDe
     modelId: 'qwen/iq3_s.gguf',
     sourceUrl: null,
     summary: 'Solid match.',
+    requirements: [],
     matchedKeywords: ['Java'],
     missingKeywords: ['Kubernetes'],
     suggestions: [],

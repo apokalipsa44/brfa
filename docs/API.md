@@ -226,6 +226,20 @@ Analysis detail (`GET /api/analyses/{id}`) — summary **plus**:
   "postingText": "…the posting text used for this analysis…",
   "postingSource": "PASTED",
   "postingTruncated": false,
+  "requirements": [
+    {
+      "text": "Kubernetes",
+      "type": "MUST",
+      "status": "MISSING",
+      "cvEvidence": ""
+    },
+    {
+      "text": "Java and Spring Boot",
+      "type": "MUST",
+      "status": "MET",
+      "cvEvidence": "Built payment APIs in Java and Spring Boot"
+    }
+  ],
   "summary": "The CV matches the core stack but lacks recent container-experience keywords.",
   "matchedKeywords": ["Java", "Spring Boot"],
   "missingKeywords": ["Kubernetes", "Terraform"],
@@ -237,7 +251,8 @@ Analysis detail (`GET /api/analyses/{id}`) — summary **plus**:
       "proposal": "Reword the skills list so existing container knowledge is grouped and keyworded.",
       "before": "Docker, CI/CD",
       "after": "Docker, Kubernetes (basics), CI/CD",
-      "priority": "HIGH"
+      "priority": "HIGH",
+      "needsConfirmation": false
     }
   ],
   "appliedChanges": [
@@ -252,12 +267,17 @@ Analysis detail (`GET /api/analyses/{id}`) — summary **plus**:
   pasted text; for a link analysis it is what the server extracted (`null` until the fetch succeeds).
 - `postingSource` — `PASTED | JSON_LD | STATIC_HTML | RENDERED_HTML` (`null` until resolved).
 - `postingTruncated` — `true` when extraction hit the posting length limit and the text was cut.
+- `requirements` — the posting's requirements once evaluation is done, otherwise `[]`. Each entry has
+  `text` (the requirement), `type` (`MUST | NICE | SOFT`), `status` (`MET | PARTIAL | MISSING`) and
+  `cvEvidence` (a verbatim CV quote for MET/PARTIAL, empty string for MISSING). `score` is derived
+  from these statuses (see §6.5).
 - `summary`, `matchedKeywords`, `missingKeywords`, `suggestions` — present once evaluation done,
   otherwise `null`/`[]`.
 - `appliedChanges` — present once the rewrite ran, otherwise `null`.
 - `resultUrl` — present only when `stage == COMPLETED` and the file exists.
 - Suggestions have stable backend-generated `id`s; `before`/`after` may be empty strings when the
-  edit has no direct text pair. `priority` is `HIGH | MEDIUM | LOW`.
+  edit has no direct text pair. `priority` is `HIGH | MEDIUM | LOW`. `needsConfirmation` is `true`
+  when the proposed `after` text mentions words absent from the CV — the UI leaves it unchecked.
 
 ### `POST /api/analyses` — start a new analysis
 
@@ -517,6 +537,25 @@ invents, repeats no employer name already in the title, contains no markdown, an
 language of the posting. The backend trims it and enforces a hard cap of 200 characters (cut at a
 word boundary with an ellipsis); an empty or missing value stays empty. Retrying the evaluation
 regenerates it. Analyses created before this field existed have none (the UI hides the line).
+
+### 6.5 Deterministic evaluation checks
+
+Because the model cannot be trusted to be self-consistent, the backend post-processes every
+evaluation after the model call (prompts/analyze.st "Checks in code"), independent of the model:
+
+1. `matchScore` is **recomputed** from `requirements` with the prompt's fixed formula (MUST 70%,
+   NICE 20%, SOFT 10%, renormalised over the tiers that have items; a missing MUST caps it at 50) and
+   overwrites the model's value.
+2. A `missingKeywords` term that does appear in the CV (case-insensitive) is moved to
+   `matchedKeywords`.
+3. A suggestion is dropped when its `before` is not found in the CV (whitespace-normalised).
+4. A suggestion is dropped when `before` and `after` are equal ignoring punctuation, whitespace and
+   case.
+5. A suggestion whose `after` mentions words not present in the CV is kept but flagged
+   `needsConfirmation: true`, so the UI leaves it unchecked and asks the user to review.
+
+The CV's own language is detected (Polish or English) and used to fill the analysis prompt so
+`summary`/`problem`/`proposal`/`after` are written in the CV's language, not the posting's.
 
 ---
 

@@ -3,6 +3,20 @@
   "properties": {
     "employer": { "type": "string" },
     "position": { "type": "string" },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "type": { "enum": ["MUST", "NICE", "SOFT"] },
+          "status": { "enum": ["MET", "PARTIAL", "MISSING"] },
+          "cvEvidence": { "type": "string" }
+        },
+        "required": ["text", "type", "status", "cvEvidence"],
+        "additionalProperties": false
+      }
+    },
     "matchScore": { "type": "integer" },
     "matchedKeywords": { "type": "array", "items": { "type": "string" } },
     "missingKeywords": { "type": "array", "items": { "type": "string" } },
@@ -25,6 +39,6 @@
     "summary": { "type": "string" },
     "shortDescription": { "type": "string" }
   },
-  "required": ["employer", "position", "matchScore", "matchedKeywords", "missingKeywords", "suggestions", "summary", "shortDescription"],
+  "required": ["employer", "position", "requirements", "matchScore", "matchedKeywords", "missingKeywords", "suggestions", "summary", "shortDescription"],
   "additionalProperties": false
 }

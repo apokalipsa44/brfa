@@ -71,8 +71,8 @@ import { formatAppliedDate, formatFullDate, todayIso } from '../../core/format';
           <button
             type="button"
             role="switch"
-            class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:outline-none"
-            [class]="applied() ? 'bg-emerald-600' : 'bg-slate-300'"
+            class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-300 transition-colors duration-150 data-[applied=true]:bg-emerald-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:outline-none"
+            [attr.data-applied]="applied()"
             [attr.aria-checked]="applied()"
             [attr.aria-label]="text()"
             [title]="text()"
@@ -80,9 +80,8 @@ import { formatAppliedDate, formatFullDate, todayIso } from '../../core/format';
           >
             <span
               aria-hidden="true"
-              class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-150"
-              [class.translate-x-4]="applied()"
-              [class.translate-x-0.5]="!applied()"
+              class="inline-block h-4 w-4 translate-x-0.5 transform rounded-full bg-white transition-transform duration-150 data-[applied=true]:translate-x-4"
+              [attr.data-applied]="applied()"
             ></span>
           </button>
         </div>

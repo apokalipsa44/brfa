@@ -97,9 +97,9 @@ class CvRewriteServiceTest {
     }
 
     private static Evaluation evaluation() {
-        return new Evaluation("Acme", "Senior Java Developer", 58, List.of("Java"), List.of("Kubernetes"),
+        return new Evaluation("Acme", "Senior Java Developer", List.of(), 58, List.of("Java"), List.of("Kubernetes"),
                 List.of(new Suggestion("Skills", "Missing K8s", "Group container skills", "Docker",
-                        "Docker, Kubernetes (basics)", Priority.MEDIUM)),
+                        "Docker, Kubernetes (basics)", Priority.MEDIUM, false)),
                 "Solid match.", "A backend role using Java and Kubernetes.");
     }
 

@@ -491,7 +491,8 @@ public class Analysis {
         List<AnalysisSuggestion> all = suggestions;
         return ids.stream()
                 .flatMap(id -> all.stream().filter(s -> s.id().equals(id)))
-                .map(s -> new Suggestion(s.section(), s.problem(), s.proposal(), s.before(), s.after(), s.priority()))
+                .map(s -> new Suggestion(s.section(), s.problem(), s.proposal(), s.before(), s.after(),
+                        s.priority(), s.needsConfirmation()))
                 .toList();
     }
 
@@ -606,7 +607,8 @@ public class Analysis {
             for (Suggestion suggestion : raw) {
                 if (suggestion == null) continue;
                 result.add(new AnalysisSuggestion("s" + index++, suggestion.section(), suggestion.problem(),
-                        suggestion.proposal(), suggestion.before(), suggestion.after(), suggestion.priority()));
+                        suggestion.proposal(), suggestion.before(), suggestion.after(), suggestion.priority(),
+                        suggestion.needsConfirmation()));
             }
         }
         return List.copyOf(result);

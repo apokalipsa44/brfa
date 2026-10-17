@@ -20,10 +20,8 @@ import {
     <input
       #field
       type="text"
-      class="w-full rounded-lg border border-indigo-500 bg-white px-2 py-1 text-slate-900 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
-      [class.text-xl]="size() === 'lg'"
-      [class.font-semibold]="size() === 'lg'"
-      [class.text-sm]="size() === 'sm'"
+      class="w-full rounded-lg border border-indigo-500 bg-white px-2 py-1 text-sm text-slate-900 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none data-[size=lg]:text-xl data-[size=lg]:font-semibold"
+      [attr.data-size]="size()"
       [value]="value()"
       [attr.maxlength]="maxLength()"
       [attr.aria-label]="ariaLabel()"
