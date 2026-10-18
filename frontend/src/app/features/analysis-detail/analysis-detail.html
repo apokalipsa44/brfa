@@ -1,0 +1,354 @@
+@if (detail(); as analysis) {
+  <div class="mx-auto max-w-3xl">
+    <!-- Header: title with a visible rename button, status badge, applied marker, created time. -->
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0 flex-1">
+        @if (editing()) {
+          <app-inline-title-edit
+            [value]="analysis.title"
+            size="lg"
+            ariaLabel="Rename analysis"
+            (saved)="saveTitle(analysis, $event)"
+            (cancelled)="cancelEdit()"
+          />
+        } @else {
+          <div class="flex min-w-0 items-center gap-2">
+            <h2 class="min-w-0 truncate text-xl font-semibold text-slate-900">
+              {{ analysis.title }}
+            </h2>
+            <button
+              type="button"
+              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-indigo-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+              aria-label="Rename analysis"
+              title="Rename"
+              (click)="startEdit(analysis)"
+            >
+              <span aria-hidden="true">✎</span>
+            </button>
+          </div>
+        }
+        <p class="mt-1 text-xs text-slate-500">Created {{ formatDateTime(analysis.createdAt) }}</p>
+      </div>
+
+      <div class="flex flex-col items-end gap-2">
+        <span
+          class="rounded-full px-2.5 py-1 text-xs font-medium"
+          [class]="statusBadgeClasses()"
+          aria-live="polite"
+          >{{ stageLabel() }}</span
+        >
+        <app-applied-toggle
+          variant="switch"
+          [applied]="!!analysis.appliedAt"
+          [appliedAt]="analysis.appliedAt"
+          (toggled)="setApplied(analysis, $event)"
+          (datePicked)="setApplied(analysis, $event)"
+        />
+      </div>
+    </div>
+
+    <!-- Role summary: inline-editable description (docs/API.md §4). -->
+    <div class="mt-3">
+      @if (editingDescription() && editingDescriptionId() === analysis.id) {
+        <textarea
+          #descriptionField
+          rows="2"
+          maxlength="200"
+          class="w-full resize-none rounded-lg border border-indigo-500 bg-white px-3 py-2 text-sm text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+          aria-label="Edit role description"
+          [value]="analysis.shortDescription ?? ''"
+          (keydown.escape)="cancelDescriptionEdit()"
+        ></textarea>
+        <div class="mt-1 flex gap-2 text-xs">
+          <button
+            type="button"
+            class="rounded-md bg-indigo-600 px-2 py-1 font-medium text-white hover:bg-indigo-700"
+            (click)="saveDescription(analysis, descriptionField)"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            class="rounded-md px-2 py-1 font-medium text-slate-500 hover:bg-slate-100"
+            (click)="cancelDescriptionEdit()"
+          >
+            Cancel
+          </button>
+        </div>
+      } @else {
+        <div class="flex items-start gap-2">
+          @if (analysis.shortDescription) {
+            <p class="min-w-0 flex-1 text-sm text-slate-600">
+              {{ analysis.shortDescription }}
+            </p>
+          } @else {
+            <p class="min-w-0 flex-1 text-sm text-slate-400 italic">No description yet.</p>
+          }
+          <button
+            type="button"
+            class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-indigo-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+            aria-label="Edit role description"
+            title="Edit description"
+            (click)="startDescriptionEdit(analysis)"
+          >
+            <span aria-hidden="true">✎</span>
+          </button>
+        </div>
+      }
+    </div>
+
+    <!-- Source link: the posting the analysis used, with a full re-run (docs/API.md §4). -->
+    @if (analysis.sourceUrl; as url) {
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <a
+          [href]="url"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open the job posting link in a new tab"
+          class="inline-flex min-w-0 items-center gap-1 text-sm text-indigo-600 transition-colors duration-150 hover:text-indigo-700 hover:underline focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+        >
+          <span aria-hidden="true">↗</span>
+          <span class="truncate">{{ url }}</span>
+        </a>
+        <button
+          type="button"
+          class="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors duration-150 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          [disabled]="working()"
+          title="Fetch the posting again and re-run the whole analysis"
+          (click)="checkAgain(analysis)"
+        >
+          Check again
+        </button>
+      </div>
+    }
+
+    <div class="mt-4">
+      <app-step-indicator
+        [stage]="analysis.stage"
+        [failedStage]="failedStage()"
+        [viewed]="viewedStep()"
+        [available]="availableSteps()"
+        (stepSelected)="onStepSelected($event)"
+      />
+    </div>
+
+    <!-- Working: calm inline progress. -->
+    @if (working()) {
+      <div class="mt-5">
+        <app-progress-inline
+          [stage]="analysis.stage"
+          [progress]="analysis.progress"
+          [message]="analysis.stageMessage ?? null"
+        />
+        @if (liveOutput(analysis.id); as live) {
+          <pre
+            class="mt-3 max-h-40 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed break-words whitespace-pre-wrap text-slate-500"
+            >{{ live }}</pre>
+        }
+        <button
+          type="button"
+          class="mt-3 inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-700 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:outline-none"
+          (click)="cancel(analysis)"
+        >
+          Cancel analysis
+        </button>
+      </div>
+    }
+
+    <!-- Step 1 — Match: score, summary and keyword coverage. -->
+    @if (viewedStep() === 0 && analysis.score !== null) {
+      <section class="mt-6">
+        <div class="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4">
+          <app-score-badge [score]="analysis.score" size="lg" />
+          <div class="min-w-0">
+            <h3 class="text-sm font-semibold text-slate-900">Match score</h3>
+            @if (analysis.summary) {
+              <p class="mt-1 text-sm text-slate-600">{{ analysis.summary }}</p>
+            }
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-col gap-3">
+          <app-keyword-chips
+            title="Matched keywords"
+            tone="matched"
+            [keywords]="analysis.matchedKeywords"
+          />
+          <app-keyword-chips
+            title="Not in your CV"
+            tone="missing"
+            [keywords]="analysis.missingKeywords"
+          />
+        </div>
+
+        @if (requirements().length > 0) {
+          <app-requirement-list
+            [requirements]="requirements()"
+            title="Requirements from the posting"
+          />
+        }
+      </section>
+    }
+
+    <!-- Step 2 — Review changes: suggestions; approval is only possible while AWAITING_REVIEW. -->
+    @if (viewedStep() === 1 && analysis.score !== null) {
+      <section class="mt-6">
+        <app-requirement-list
+          [requirements]="requirements()"
+          title="What the analysis was based on"
+        />
+
+        @if (analysis.suggestions.length > 0) {
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-semibold text-slate-900">Suggested changes</h3>
+            @if (reviewing()) {
+              <div class="flex gap-2 text-xs">
+                <button
+                  type="button"
+                  class="rounded-md px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50"
+                  (click)="selectAll(analysis)"
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md px-2 py-1 font-medium text-slate-500 hover:bg-slate-100"
+                  (click)="selectNone()"
+                >
+                  Select none
+                </button>
+              </div>
+            }
+          </div>
+
+          <div class="mt-2 flex flex-col gap-2">
+            <app-suggestion-list
+              [suggestions]="analysis.suggestions"
+              [selectedIds]="selectedIds()"
+              (toggled)="toggleSuggestion($event)"
+            />
+          </div>
+        } @else {
+          <p class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+            No changes suggested — your CV already covers the posting's requirements. You can still
+            generate an ATS-formatted version.
+          </p>
+        }
+
+        @if (reviewing()) {
+          @if (analyses.actionError(); as message) {
+            <p role="alert" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {{ message }}
+            </p>
+          }
+
+          <button
+            type="button"
+            class="mt-4 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            [class]="
+              canApply()
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                : 'border border-slate-300 text-slate-400'
+            "
+            [disabled]="!canApply()"
+            (click)="apply(analysis)"
+          >
+            @if (analysis.suggestions.length > 0) {
+              Apply selected changes
+              <span class="font-normal"
+                >· {{ selectedCount() }} of {{ analysis.suggestions.length }} selected</span
+              >
+            } @else {
+              Generate improved CV
+            }
+          </button>
+        }
+      </section>
+    }
+
+    <!-- Step 3 — Improved CV: download and the changes that were applied. -->
+    @if (viewedStep() === 2) {
+      <section class="mt-6">
+        @if (analysis.resultUrl) {
+          <a
+            [href]="analysis.resultUrl"
+            download
+            class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:outline-none"
+          >
+            Download improved CV
+          </a>
+        } @else if (analysis.stage === 'COMPLETED') {
+          <p class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+            The improved CV is ready, but the file is no longer available.
+          </p>
+        }
+
+        @if (analysis.appliedChanges && analysis.appliedChanges.length > 0) {
+          <h3 class="mt-6 text-sm font-semibold text-slate-900">Changes applied</h3>
+          <ul class="mt-2 flex flex-col gap-2">
+            @for (change of analysis.appliedChanges; track change.section + ':' + $index) {
+              <li class="rounded-xl border border-slate-200 bg-white p-3">
+                <p class="text-sm font-medium text-slate-900">{{ change.section }}</p>
+                @if (change.before) {
+                  <p class="mt-1 text-sm text-slate-500 line-through">{{ change.before }}</p>
+                }
+                <p class="text-sm text-slate-700">{{ change.after }}</p>
+                @if (change.reason) {
+                  <p class="mt-1 text-xs text-slate-500">{{ change.reason }}</p>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
+
+    <!-- Failed: friendly copy, retry, technical details collapsed. -->
+    @if (analysis.stage === 'FAILED') {
+      <section class="mt-6">
+        <div class="rounded-xl border border-red-200 bg-red-50 p-4" role="alert">
+          <p class="text-sm font-medium text-red-800">The analysis did not finish</p>
+          <p class="mt-1 text-sm text-red-700">
+            {{
+              errorMessage(
+                analysis.errorCode,
+                'The analysis could not complete. Try running it again.'
+              )
+            }}
+          </p>
+          <button
+            type="button"
+            class="mt-3 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-red-700 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:outline-none"
+            (click)="retry(analysis)"
+          >
+            Retry
+          </button>
+        </div>
+
+        @if (analysis.errorCode || analysis.errorMessage) {
+          <details class="mt-3">
+            <summary class="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+              Technical details
+            </summary>
+            <p class="mt-2 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600">
+              @if (analysis.errorCode) {
+                <span class="font-mono">{{ analysis.errorCode }}</span>
+              }
+              @if (analysis.errorMessage) {
+                <span class="mt-1 block">{{ analysis.errorMessage }}</span>
+              }
+            </p>
+          </details>
+        }
+      </section>
+    }
+  </div>
+} @else {
+  <div class="flex h-full items-center justify-center" aria-live="polite">
+    @if (analyses.detailLoading()) {
+      <p class="text-sm text-slate-500">Loading…</p>
+    } @else {
+      <p class="text-sm text-slate-500">This analysis is no longer available.</p>
+    }
+  </div>
+}

@@ -13,60 +13,7 @@ import { EventsService } from '../../core/sse/events.service';
   selector: 'app-top-bar',
   imports: [CvChip, ModelSelect],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <header
-      class="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4"
-    >
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="rounded-md p-2 text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none lg:hidden"
-          aria-label="Open analyses"
-          (click)="openSidebar.emit()"
-        >
-          <span aria-hidden="true">☰</span>
-        </button>
-        <h1 class="text-sm font-semibold whitespace-nowrap text-slate-900">CV Checker</h1>
-
-        @if (events.disconnected()) {
-          <span
-            role="status"
-            aria-live="polite"
-            class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
-            >Reconnecting…</span
-          >
-        }
-      </div>
-
-      <div class="flex min-w-0 items-center gap-2">
-        @if (!cv.hasCv()) {
-          <span
-            class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-800"
-          >
-            No CV yet
-          </span>
-        }
-
-        @if (cv.cvError(); as message) {
-          <span role="alert" class="text-xs text-red-700">{{ message }}</span>
-        }
-
-        <app-cv-chip />
-        <span class="hidden h-6 w-px bg-slate-200 sm:block" aria-hidden="true"></span>
-        <app-model-select />
-
-        @if (!cv.ready()) {
-          <span class="hidden text-sm text-amber-700 sm:block">
-            {{
-              cv.models().length === 0
-                ? 'No models loaded'
-                : 'Load a model in LM Studio to continue'
-            }}
-          </span>
-        }
-      </div>
-    </header>
-  `,
+  templateUrl: './top-bar.html',
 })
 export class TopBar {
   protected readonly cv = inject(CvContextStore);

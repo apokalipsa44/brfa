@@ -4,13 +4,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 @Component({
   selector: 'app-score-badge',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<span
-    [class]="classes()"
-    class="tabular-nums"
-    [attr.role]="label() ? 'img' : null"
-    [attr.aria-label]="label()"
-    >{{ score() }}</span
-  >`,
+  templateUrl: './score-badge.html',
 })
 export class ScoreBadge {
   readonly score = input<number | null>(null);

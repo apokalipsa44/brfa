@@ -61,7 +61,11 @@ by `@EnabledIfEnvironmentVariable(LM_STUDIO_LIVE=1)`.
 - Java: records for DTOs, constructor injection only (no `@Autowired` fields).
 - Angular: standalone components only, signals as state source, `@if/@for/@switch`, `inject()`,
   `OnPush`. Files are kebab-case **without** a `.component` suffix (e.g. `cv-dropzone.ts`,
-  `analyses.store.ts`); many components use inline `template`. Selector prefix `app`.
+  `analyses.store.ts`). Selector prefix `app`.
+- Angular templates live in a **separate `<name>.html` file** next to the component and are wired
+  with `templateUrl: './<name>.html'`. Never use an inline `template:` on a production component
+  (even for one-liners) — test host wrappers inside `*.spec.ts` are the only exception. Styling is
+  global Tailwind classes in `src/styles.css`, never `styles`/`styleUrls`.
 - Root `tsconfig.json` does **not** enable `strict: true` (only `noImplicit*` + Angular `strict*`).
 - Prettier config exists (`.prettierrc`, width 100, single quotes) but there is **no** npm format
   script — run `npx prettier --write src` if needed.

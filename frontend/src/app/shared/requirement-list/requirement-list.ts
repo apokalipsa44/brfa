@@ -10,38 +10,7 @@ import { Requirement, RequirementStatus, RequirementType } from '../../core/mode
 @Component({
   selector: 'app-requirement-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    @if (requirements().length > 0) {
-      <div class="mt-4">
-        @if (title()) {
-          <h3 class="text-sm font-semibold text-slate-900">{{ title() }}</h3>
-        }
-        <ul class="mt-2 flex flex-col gap-1.5">
-          @for (requirement of requirements(); track $index) {
-            <li class="flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-2.5">
-              <span
-                class="mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium"
-                [class]="statusTone(requirement.status)"
-              >
-                {{ STATUS_LABEL[requirement.status] }}
-              </span>
-              <span class="min-w-0 flex-1">
-                <span class="block text-sm text-slate-700">{{ requirement.text }}</span>
-                @if (requirement.cvEvidence) {
-                  <span class="mt-0.5 block text-xs text-slate-500"
-                    >CV: “{{ requirement.cvEvidence }}”</span
-                  >
-                }
-              </span>
-              <span class="mt-0.5 shrink-0 text-xs text-slate-400">{{
-                TYPE_LABEL[requirement.type]
-              }}</span>
-            </li>
-          }
-        </ul>
-      </div>
-    }
-  `,
+  templateUrl: './requirement-list.html',
 })
 export class RequirementList {
   readonly requirements = input.required<Requirement[]>();
