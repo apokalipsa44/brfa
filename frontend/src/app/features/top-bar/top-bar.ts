@@ -20,4 +20,5 @@ export class TopBar {
   protected readonly events = inject(EventsService);
 
   readonly openSidebar = output();
+  readonly openSkillGaps = output();
 }

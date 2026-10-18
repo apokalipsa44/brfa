@@ -108,6 +108,41 @@ export interface ModelState {
   reason: string | null;
 }
 
+/** Whether a skill gap is a missing requirement or a nice-to-have (docs/API.md §9). */
+export type GapKind = 'MISSING' | 'NICE';
+
+/** The user's progress on a skill gap (docs/API.md §9). */
+export type GapStatus = 'OPEN' | 'PLANNED' | 'LEARNED';
+
+/** Where a skill gap came from: aggregated from analyses or added by the user (docs/API.md §9). */
+export type GapOrigin = 'DERIVED' | 'MANUAL';
+
+/** One analysis that raised a skill gap (docs/API.md §9). */
+export interface GapSource {
+  analysisId: string;
+  title: string;
+}
+
+/** One aggregated + curated skill gap (docs/API.md §9). */
+export interface GapItem {
+  id: string;
+  text: string;
+  kind: GapKind;
+  status: GapStatus;
+  note: string;
+  origin: GapOrigin;
+  occurrences: number;
+  sources: GapSource[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Maximum skill-gap text length enforced by the backend (docs/API.md §9). */
+export const MAX_GAP_TEXT_CHARS = 300;
+
+/** Maximum skill-gap note length enforced by the backend (docs/API.md §9). */
+export const MAX_GAP_NOTE_CHARS = 500;
+
 /** Maximum job posting length enforced by the backend (docs/API.md §4). */
 export const MAX_JOB_POSTING_CHARS = 20_000;
 

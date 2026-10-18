@@ -193,11 +193,6 @@
     <!-- Step 2 — Review changes: suggestions; approval is only possible while AWAITING_REVIEW. -->
     @if (viewedStep() === 1 && analysis.score !== null) {
       <section class="mt-6">
-        <app-requirement-list
-          [requirements]="requirements()"
-          title="What the analysis was based on"
-        />
-
         @if (analysis.suggestions.length > 0) {
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="text-sm font-semibold text-slate-900">Suggested changes</h3>

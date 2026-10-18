@@ -273,7 +273,9 @@ const FETCH_STAGE_ERROR_CODES = new Set([
 function defaultStep(stage: AnalysisStage): number {
   switch (stage) {
     case 'AWAITING_REVIEW':
-      return 1;
+      // Do not jump to the review step when evaluation finishes; the user reads Match first and
+      // opens Review changes themselves (the step indicator marks it current and clickable).
+      return 0;
     case 'REWRITING':
     case 'GENERATING_PDF':
     case 'COMPLETED':

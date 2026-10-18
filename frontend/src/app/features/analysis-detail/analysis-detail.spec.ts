@@ -112,6 +112,12 @@ describe('AnalysisDetail review', () => {
     return button;
   }
 
+  /** AWAITING_REVIEW opens on Match; the review controls live on step 2. */
+  function openReview(): void {
+    stepButton(1).click();
+    fixture.detectChanges();
+  }
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Host],
@@ -135,6 +141,7 @@ describe('AnalysisDetail review', () => {
 
   it('checks high and medium priority by default and disables apply when empty', () => {
     selectAnalysis();
+    openReview();
 
     expect(host.detail()?.selectedIds()).toEqual(new Set(['s1', 's2']));
     expect(buttonFor('Apply selected changes').disabled).toBe(false);
@@ -147,6 +154,7 @@ describe('AnalysisDetail review', () => {
 
   it('applies only the checked suggestions', () => {
     selectAnalysis();
+    openReview();
 
     host.detail()?.toggleSuggestion('s2');
     fixture.detectChanges();
@@ -159,6 +167,7 @@ describe('AnalysisDetail review', () => {
 
   it('offers to generate the CV without changes when the evaluation suggested none', () => {
     selectAnalysis({ suggestions: [] });
+    openReview();
 
     expect(fixture.nativeElement.textContent).toContain('No changes suggested');
     const button = buttonFor('Generate improved CV');
@@ -325,21 +334,21 @@ describe('AnalysisDetail review', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Check again');
   });
 
-  it('lets the user open the earlier steps from the indicator', () => {
+  it('opens on the match step and lets the user open the review step', () => {
     selectAnalysis();
 
-    // AWAITING_REVIEW opens on the review step; the match result is a click away.
-    expect(fixture.nativeElement.textContent).not.toContain('Match score');
-    expect(buttonFor('Apply selected changes')).toBeTruthy();
-
-    stepButton(0).click();
-    fixture.detectChanges();
+    // AWAITING_REVIEW opens on Match (no auto-jump to review); review is a click away.
     expect(fixture.nativeElement.textContent).toContain('Match score');
     expect(fixture.nativeElement.textContent).not.toContain('Apply selected changes');
 
     stepButton(1).click();
     fixture.detectChanges();
     expect(buttonFor('Apply selected changes')).toBeTruthy();
+
+    stepButton(0).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Match score');
+    expect(fixture.nativeElement.textContent).not.toContain('Apply selected changes');
   });
 
   it('re-opens finished steps read-only once completed', () => {

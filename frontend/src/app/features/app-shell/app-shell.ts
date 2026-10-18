@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 
 import { AnalysesStore } from '../../core/analyses.store';
 import { CvContextStore } from '../../core/cv-context.store';
@@ -9,7 +9,11 @@ import { CvDropzone } from '../cv-dropzone/cv-dropzone';
 import { AnalysisSidebar } from '../analysis-sidebar/analysis-sidebar';
 import { NewAnalysisForm } from '../new-analysis-form/new-analysis-form';
 import { AnalysisDetail } from '../analysis-detail/analysis-detail';
+import { SkillGaps } from '../skill-gaps/skill-gaps';
 import { Toast } from '../../shared/toast/toast';
+
+/** Main-panel views hosted inside the shell (the gaps view is a panel, not a route). */
+type View = 'workspace' | 'gaps';
 
 /**
  * Workspace shell (docs/API.md UI): the top bar holds the persistent CV + model context, the sidebar
@@ -19,7 +23,15 @@ import { Toast } from '../../shared/toast/toast';
  */
 @Component({
   selector: 'app-shell',
-  imports: [TopBar, CvDropzone, AnalysisSidebar, NewAnalysisForm, AnalysisDetail, Toast],
+  imports: [
+    TopBar,
+    CvDropzone,
+    AnalysisSidebar,
+    NewAnalysisForm,
+    AnalysisDetail,
+    SkillGaps,
+    Toast,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app-shell.html',
 })
@@ -31,12 +43,18 @@ export class AppShell {
   private readonly pageLeaveGuard = inject(PageLeaveGuard);
 
   protected readonly sidebarOpen = signal(false);
+  protected readonly view = signal<View>('workspace');
 
   constructor() {
     this.events.connect();
+    // Selecting an analysis always returns to the workspace panel.
+    effect(() => {
+      if (this.analyses.selectedId()) this.view.set('workspace');
+    });
   }
 
   protected newAnalysis(): void {
+    this.view.set('workspace');
     this.analyses.select(null);
     this.sidebarOpen.set(false);
   }

@@ -1,5 +1,8 @@
 <div class="flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900">
-  <app-top-bar (openSidebar)="sidebarOpen.set(true)" />
+  <app-top-bar
+    (openSidebar)="sidebarOpen.set(true)"
+    (openSkillGaps)="view.set('gaps')"
+  />
 
   <div class="mx-auto flex w-full max-w-[1440px] flex-1 gap-5 overflow-hidden px-6 py-4">
     <!-- Sidebar: fixed on large screens, drawer on small ones. -->
@@ -30,7 +33,9 @@
 
     <!-- Main panel. -->
     <main class="min-w-0 flex-1 overflow-y-auto">
-      @if (!cv.hasCv()) {
+      @if (view() === 'gaps') {
+        <app-skill-gaps (closed)="view.set('workspace')" />
+      } @else if (!cv.hasCv()) {
         <div class="flex min-h-full items-center justify-center">
           <app-cv-dropzone class="w-full max-w-lg" />
         </div>

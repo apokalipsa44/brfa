@@ -12,6 +12,14 @@
     </button>
     <h1 class="text-sm font-semibold whitespace-nowrap text-slate-900">CV Checker</h1>
 
+    <button
+      type="button"
+      class="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors duration-150 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+      (click)="openSkillGaps.emit()"
+    >
+      Skill gaps
+    </button>
+
     @if (events.disconnected()) {
       <span
         role="status"

@@ -485,6 +485,9 @@ the one snapshotted at creation (no re-snapshot).
 | `NOT_CANCELLABLE` | 409 | `cancel` while not in a cancellable stage |
 | `NOT_READY` | 409 | result requested before completion |
 | `RESULT_NOT_FOUND` | 404 | completed but the file was cleaned up |
+| `GAP_TEXT_BLANK` | 400 | `POST`/`PATCH` a skill gap with blank text (§9) |
+| `GAP_TEXT_TOO_LONG` | 400 | skill gap text > 300 characters |
+| `GAP_NOT_FOUND` | 404 | unknown skill gap id |
 | `LLM_INVALID_OUTPUT` | 502 | model output failed validation after max retries — retry |
 | `LLM_ABORTED` | 502 | LLM call aborted because the analysis run was cancelled — restart the run |
 | `INTERNAL_ERROR` | 500 | unexpected failure — retry |
@@ -643,3 +646,88 @@ Connection / replay semantics:
   promptly so a retry or the next queued analysis starts. Partial files from the cancelled attempt
   are deleted.
 - SSE replay buffer bound: `cvchecker.events.replay-buffer` (default 1000 events).
+
+---
+
+## 9. Skill gaps
+
+A curated, cross-analysis view of what the CV lacks. Every analysis's evaluation carries
+`requirements` (§4); the backend **aggregates** the ones whose `status == "MISSING"` (what the CV is
+missing) or whose `type == "NICE"` (nice-to-haves) across **all** analyses, deduplicating them by a
+normalized text key (case-insensitive, whitespace-collapsed) and counting how many analyses raised
+each one. The user can then curate the list — rename, re-classify, mark progress, annotate, add their
+own gaps, or dismiss — so it can drive a future CV rewrite.
+
+Gaps are persisted (one `skill_gaps` table in the same SQLite database as analyses, docs/DECISIONS);
+`cvchecker.persistence=memory` keeps them volatile like analyses. The sync runs on every `GET`: it
+creates a **derived** row for each aggregated term that has none yet. User fields are **never**
+overwritten by re-aggregation; a deleted derived gap is stored **dismissed** so it does not reappear.
+`occurrences` and `sources` are recomputed live from the analyses on each read (a manual gap that no
+analysis mentions reports `0`).
+
+Gap item:
+
+```json
+{
+  "id": "8c1e…-uuid",
+  "text": "Kubernetes",
+  "kind": "MISSING",
+  "status": "OPEN",
+  "note": "take the CKA next quarter",
+  "origin": "DERIVED",
+  "occurrences": 3,
+  "sources": [ { "analysisId": "3f7c…", "title": "Acme · Senior Java Developer" } ],
+  "createdAt": "2026-10-18T10:00:00Z",
+  "updatedAt": "2026-10-18T10:05:00Z"
+}
+```
+
+- `kind` — `MISSING` when at least one analysis marked the term missing, otherwise `NICE`.
+- `status` — the user's progress: `OPEN` (default) | `PLANNED` | `LEARNED`.
+- `origin` — `DERIVED` (aggregated from analyses) | `MANUAL` (user-created).
+- `occurrences` / `sources` — how many analyses raised the term and which ones (derived only).
+
+### `GET /api/skill-gaps` — aggregated + curated list
+
+Syncs the aggregation into the store, then returns the non-dismissed gaps: missing first, then by
+status, occurrence count (desc) and text. `200`: an array (empty when there is nothing yet).
+
+### `POST /api/skill-gaps` — add a gap
+
+Body:
+
+```json
+{ "text": "GraphQL", "kind": "NICE", "note": "want to learn" }
+```
+
+- `text` — required, non-blank, ≤ 300 characters.
+- `kind` — `MISSING` | `NICE`; defaults to `MISSING`.
+- `note` — optional, trimmed, ≤ 500 characters.
+
+- **201**: the created item (`origin = "MANUAL"`, `status = "OPEN"`, `occurrences = 0`).
+- **400** `GAP_TEXT_BLANK` / `GAP_TEXT_TOO_LONG`.
+
+### `PATCH /api/skill-gaps/{id}` — update a gap
+
+Partial update; every field is optional, at least one must be present. `text` recomputes the matching
+key; user values are never touched by aggregation.
+
+```json
+{ "status": "LEARNED", "note": "course finished" }
+```
+
+- **200**: the updated item.
+- **400** `GAP_TEXT_BLANK` / `GAP_TEXT_TOO_LONG`.
+- **422** `NO_UPDATES` — empty body or none of `text` / `kind` / `status` / `note` present.
+- **404** `GAP_NOT_FOUND`.
+
+### `DELETE /api/skill-gaps/{id}` — remove a gap
+
+- **204** — removed. A `MANUAL` gap is hard-deleted; a `DERIVED` one is dismissed so the next `GET`
+  does not bring it back.
+- **404** `GAP_NOT_FOUND`.
+
+Skill gaps are a personal backlog, not tied to one analysis: deleting an analysis does not remove its
+aggregated gaps (they simply stop being re-counted and disappear only if no other analysis raises
+them, once dismissed or never seen again). Changes are **not** pushed over SSE; the view refreshes on
+open and after each action.

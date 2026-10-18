@@ -1,7 +1,15 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { catchError, Observable, of, throwError } from 'rxjs';
-import { AnalysisDetail, AnalysisSummary, CvInfo, ModelState } from '../models';
+import { AnalysisDetail, AnalysisSummary, CvInfo, GapItem, GapKind, GapStatus, ModelState } from '../models';
+
+/** The optional fields of a PATCH /api/skill-gaps/{id} (docs/API.md §9); at least one is sent. */
+export interface GapPatch {
+  text?: string;
+  kind?: GapKind;
+  status?: GapStatus;
+  note?: string;
+}
 
 /** The optional fields of a PATCH /api/analyses/{id} (docs/API.md §4); at least one is sent. */
 export interface AnalysisPatch {
@@ -90,6 +98,26 @@ export class WorkspaceApi {
 
   deleteAnalysis(id: string): Observable<void> {
     return this.http.delete<void>(`/api/analyses/${encodeURIComponent(id)}`);
+  }
+
+  /** Aggregated + curated skill gaps (docs/API.md §9); the backend re-syncs from analyses on read. */
+  listGaps(): Observable<GapItem[]> {
+    return this.http.get<GapItem[]>('/api/skill-gaps');
+  }
+
+  /** Adds a user-created skill gap (docs/API.md §9). */
+  createGap(text: string, kind: GapKind, note: string): Observable<GapItem> {
+    return this.http.post<GapItem>('/api/skill-gaps', { text, kind, note });
+  }
+
+  /** Partial update of a skill gap's text, kind, status or note (docs/API.md §9). */
+  updateGap(id: string, patch: GapPatch): Observable<GapItem> {
+    return this.http.patch<GapItem>(`/api/skill-gaps/${encodeURIComponent(id)}`, patch);
+  }
+
+  /** Removes a skill gap (docs/API.md §9). */
+  deleteGap(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/skill-gaps/${encodeURIComponent(id)}`);
   }
 }
 
