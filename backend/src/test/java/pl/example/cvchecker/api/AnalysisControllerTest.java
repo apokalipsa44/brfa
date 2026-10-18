@@ -84,6 +84,16 @@ class AnalysisControllerTest {
         analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
         return analysis;
     }
+
+    /** An analysis at the review gate whose evaluation proposed no changes (nothing to approve). */
+    private static Analysis awaitingReviewNoSuggestions() {
+        Analysis analysis = new Analysis("a1", "cv.pdf", "Jan Kowalski, Java", "job", "qwen/iq3_s.gguf");
+        analysis.setEvaluation(new Evaluation("Acme", "Senior Java Developer", List.of(), 83, List.of("Java"),
+                List.of("Kubernetes"), List.of(), "Solid match.", "Payment APIs in Java."));
+        analysis.transition(AnalysisStage.AWAITING_REVIEW, 40);
+        return analysis;
+    }
+
     @Test
     void validCreateReturns202Queued() throws Exception {
         when(cvStore.current()).thenReturn(Optional.of(cv()));
@@ -408,6 +418,28 @@ class AnalysisControllerTest {
                         .content("{\"approvedSuggestionIds\":[\"s9\"]}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("NO_SUGGESTIONS_APPROVED"));
+    }
+
+    @Test
+    void applyWithNoBodyWhileSuggestionsExistReturns422() throws Exception {
+        when(registry.find("a1")).thenReturn(Optional.of(awaitingReview()));
+
+        mvc.perform(post("/api/analyses/a1/apply").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("NO_SUGGESTIONS_APPROVED"));
+    }
+
+    @Test
+    void applyWithNoSuggestionsReturns202Rewriting() throws Exception {
+        Analysis analysis = awaitingReviewNoSuggestions();
+        when(registry.find("a1")).thenReturn(Optional.of(analysis));
+
+        mvc.perform(post("/api/analyses/a1/apply").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.stage").value("REWRITING"))
+                .andExpect(jsonPath("$.progress").value(65));
+
+        verify(pipeline).apply(analysis);
     }
 
     @Test

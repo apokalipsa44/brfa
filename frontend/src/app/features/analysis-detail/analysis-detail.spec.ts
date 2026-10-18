@@ -157,6 +157,23 @@ describe('AnalysisDetail review', () => {
     request.flush({ ...detailResponse(), stage: 'REWRITING', progress: 65 });
   });
 
+  it('offers to generate the CV without changes when the evaluation suggested none', () => {
+    selectAnalysis({ suggestions: [] });
+
+    expect(fixture.nativeElement.textContent).toContain('No changes suggested');
+    const button = buttonFor('Generate improved CV');
+    expect(button.disabled).toBe(false);
+
+    button.click();
+    const request = http.expectOne('/api/analyses/a1/apply');
+    expect(request.request.body).toEqual({ approvedSuggestionIds: [] });
+    request.flush({
+      ...detailResponse({ suggestions: [] }),
+      stage: 'REWRITING',
+      progress: 65,
+    });
+  });
+
   it('saves an inline title edit on Enter', () => {
     selectAnalysis();
 

@@ -134,18 +134,18 @@ class AnalysisCancelApiTest {
                 .andExpect(jsonPath("$.code").value("NOT_CANCELLABLE"));
     }
 
-    private void makeModelReady() {
+    private void makeModelReady() throws Exception {
         when(lmClient.listModels())
                 .thenReturn(new LmStudioModelList(true, List.of(new ModelInfo("qwen/iq3_s.gguf", true))));
         when(lmClient.probe("qwen/iq3_s.gguf")).thenReturn(true);
-    }
-
-    private String createAnalysis() throws Exception {
+        // Select once, before any analysis runs: a switch is refused while one is active (docs/API.md §6.3).
         mvc.perform(put("/api/llm/active-model").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"modelId\":\"qwen/iq3_s.gguf\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ready").value(true));
+    }
 
+    private String createAnalysis() throws Exception {
         MvcResult result = mvc.perform(post("/api/analyses").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"jobPosting\":\"Senior Java Developer wanted\"}"))
                 .andExpect(status().isAccepted())

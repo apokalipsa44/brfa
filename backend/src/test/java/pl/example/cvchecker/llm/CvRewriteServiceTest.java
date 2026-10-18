@@ -43,7 +43,7 @@ class CvRewriteServiceTest {
                 new LlmStructuredCaller(new ObjectMapper()),
                 new ByteArrayResource("Return JSON.".getBytes(StandardCharsets.UTF_8)),
                 new ByteArrayResource("{}".getBytes(StandardCharsets.UTF_8)),
-                "none", 4096);
+                "none", 4096, java.time.Duration.ofMinutes(10));
     }
 
     @Test
@@ -66,8 +66,29 @@ class CvRewriteServiceTest {
     }
 
     @Test
-    void retriesInvalidOutputThenSucceeds() {
-        when(call.entity(CvRewriteResult.class))
+    void asksForNoContentChangesWhenNothingIsApproved() {
+        when(call.entity(CvRewriteResult.class)).thenReturn(rewrite());
+
+        service.rewrite("cv", "job", evaluation(), List.of(), null);
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(request).user(captor.capture());
+        assertThat(captor.getValue()).contains("There are NO approved suggestions");
+    }
+
+    @Test
+    void omitsTheNoChangesDirectiveWhenSuggestionsAreApproved() {
+        when(call.entity(CvRewriteResult.class)).thenReturn(rewrite());
+
+        service.rewrite("cv", "job", evaluation(), approved(), null);
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(request).user(captor.capture());
+        assertThat(captor.getValue()).doesNotContain("There are NO approved suggestions");
+    }
+
+    @Test
+    void retriesInvalidOutputThenSucceeds() {        when(call.entity(CvRewriteResult.class))
                 .thenReturn(new CvRewriteResult(null, List.of()))
                 .thenReturn(rewrite());
 

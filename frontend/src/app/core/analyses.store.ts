@@ -34,6 +34,9 @@ export class AnalysesStore {
   /** Transient live LLM output per analysis (docs/API.md §7 `analysis.output`); empty when idle. */
   readonly liveOutput = this._liveOutput.asReadonly();
 
+  /** True while any analysis runs; the active model is locked to it then (docs/API.md §6.3). */
+  readonly anyWorking = computed(() => this._analyses().some((a) => isWorking(a.stage)));
+
   /** The detail of the selected analysis, or null while it is not loaded/selected. */
   readonly selected = computed<AnalysisDetail | null>(() => {
     const id = this._selectedId();

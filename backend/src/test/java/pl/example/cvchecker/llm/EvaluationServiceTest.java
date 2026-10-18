@@ -42,7 +42,7 @@ class EvaluationServiceTest {
         service = new EvaluationService(builder, new LlmStructuredCaller(new ObjectMapper()),
                 new ByteArrayResource("Return JSON.".getBytes(StandardCharsets.UTF_8)),
                 new ByteArrayResource("{}".getBytes(StandardCharsets.UTF_8)),
-                "none", 4096);
+                "none", 4096, java.time.Duration.ofMinutes(10));
     }
 
     @Test

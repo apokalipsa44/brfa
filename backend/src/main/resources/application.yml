@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: cv-checker-backend
+  jackson:
+    deserialization:
+      # LLM JSON and pre-existing SQLite rows may carry an explicit null for a primitive boolean
+      # (e.g. Suggestion.needsConfirmation). Coerce null to the primitive default instead of failing
+      # (Jackson 3 fails by default). See docs/DECISIONS.md.
+      fail-on-null-for-primitives: false
   threads:
     virtual:
       enabled: true   # open SSE connections must not occupy the servlet thread pool (plan §4.1)
@@ -21,6 +27,10 @@ spring:
       api-key: lm-studio   # any non-empty string; LM Studio ignores it (plan §6.3)
       # NOTE: must include /v1 — Spring AI appends only /chat/completions (M7)
       base-url: ${LLM_BASE_URL:http://localhost:1234/v1}
+      # Per-request timeout applied by the OpenAI SDK (default 60s). A cold large prompt waits
+      # longer than 60s for the first streamed token, so keep it aligned with the OkHttp timeouts
+      # in AiConfig (docs/DECISIONS.md).
+      timeout: ${cvchecker.llm.read-timeout:10m}
       chat:
         options:
           model: ${LLM_MODEL:unconfigured}   # read from GET /v1/models; never hardcoded (AGENTS.md)
@@ -33,7 +43,8 @@ management:
 cvchecker:
   persistence: sqlite   # sqlite = analyses survive restarts (docs/API.md §8); memory = tests only
   llm:
-    read-timeout: 10m   # a local model may answer over minutes (plan §6.3)
+    read-timeout: 10m   # a local model may answer over minutes (plan §6.3.3)
+    connect-timeout: 10s   # TCP connect to LM Studio; the server is local, so this stays short
     reasoning-effort: none   # disable model "thinking" for the JSON steps (huge latency win); blank = model default
     max-output-tokens: 4096  # structured outputs are short once thinking is off (was 8192)
   lmstudio:

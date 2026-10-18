@@ -218,15 +218,16 @@ public class AnalysisController {
             throw new ApiException(409, "NOT_AWAITING_REVIEW", "Not awaiting review",
                     "Suggestions can only be approved while the analysis is AWAITING_REVIEW.");
         }
-        List<String> requested = body == null ? List.of() : body.approvedSuggestionIds();
-        if (requested == null || requested.isEmpty()) {
-            throw new ApiException(422, "NO_SUGGESTIONS_APPROVED", "No suggestions approved",
-                    "Approve at least one suggestion so the CV is not regenerated unchanged.");
-        }
+        List<String> requested = body == null || body.approvedSuggestionIds() == null
+                ? List.of() : body.approvedSuggestionIds();
         List<String> known = requested.stream().filter(analysis::hasSuggestion).distinct().toList();
-        if (known.isEmpty()) {
-            throw new ApiException(422, "NO_SUGGESTIONS_APPROVED", "No suggestions approved",
-                    "None of the approved suggestion ids match this analysis.");
+        // An evaluation may legitimately propose no changes (the ATS prompt allows an empty list).
+        // Only reject an empty/unknown approval while there *are* suggestions to approve.
+        if (known.isEmpty() && !analysis.suggestions().isEmpty()) {
+            String message = requested.isEmpty()
+                    ? "Approve at least one suggestion so the CV is not regenerated unchanged."
+                    : "None of the approved suggestion ids match this analysis.";
+            throw new ApiException(422, "NO_SUGGESTIONS_APPROVED", "No suggestions approved", message);
         }
         analysis.beginRewrite(known); // synchronous: the 202 body already shows REWRITING
         AnalysisSummary rewriting = analysis.summary();

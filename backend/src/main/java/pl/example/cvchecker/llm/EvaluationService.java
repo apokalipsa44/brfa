@@ -2,6 +2,7 @@ package pl.example.cvchecker.llm;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,17 +37,20 @@ public class EvaluationService {
     private final String jsonSchema;
     private final String reasoningEffort;
     private final int maxOutputTokens;
+    private final Duration requestTimeout;
     private final LlmStructuredCaller caller;
 
     public EvaluationService(ChatClient.Builder builder, LlmStructuredCaller caller,
             @Value("classpath:/prompts/analyze.st") Resource analyzePrompt,
             @Value("classpath:/prompts/analysis.schema.json") Resource analysisSchema,
             @Value("${cvchecker.llm.reasoning-effort:none}") String reasoningEffort,
-            @Value("${cvchecker.llm.max-output-tokens:4096}") int maxOutputTokens) {
+            @Value("${cvchecker.llm.max-output-tokens:4096}") int maxOutputTokens,
+            @Value("${cvchecker.llm.read-timeout:10m}") Duration requestTimeout) {
         this.chat = builder.build();
         this.caller = caller;
         this.reasoningEffort = reasoningEffort;
         this.maxOutputTokens = maxOutputTokens;
+        this.requestTimeout = requestTimeout;
         try {
             this.basePrompt = new String(analyzePrompt.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             this.jsonSchema = new String(analysisSchema.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -174,6 +178,7 @@ public class EvaluationService {
         OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder()
                 .temperature(0.2)
                 .maxTokens(maxOutputTokens)
+                .timeout(requestTimeout)
                 .responseFormat(OpenAiChatModel.ResponseFormat.builder()
                         .type(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA)
                         .jsonSchema(jsonSchema)

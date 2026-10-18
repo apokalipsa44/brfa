@@ -10,16 +10,12 @@ import {
 import { AnalysesStore, isWorking } from '../../core/analyses.store';
 import { errorMessage } from '../../core/error-messages';
 import { formatDateTime } from '../../core/format';
-import {
-  AnalysisDetail as Detail,
-  AnalysisStage,
-  RequirementStatus,
-  RequirementType,
-} from '../../core/models';
+import { AnalysisDetail as Detail, AnalysisStage } from '../../core/models';
 import { AppliedToggle } from '../../shared/applied-toggle/applied-toggle';
 import { InlineTitleEdit } from '../../shared/inline-title-edit/inline-title-edit';
 import { KeywordChips } from '../../shared/keyword-chips/keyword-chips';
 import { ProgressInline } from '../../shared/progress-inline/progress-inline';
+import { RequirementList } from '../../shared/requirement-list/requirement-list';
 import { ScoreBadge } from '../../shared/score-badge/score-badge';
 import { StepIndicator } from '../../shared/step-indicator/step-indicator';
 import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
@@ -36,6 +32,7 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
     InlineTitleEdit,
     KeywordChips,
     ProgressInline,
+    RequirementList,
     ScoreBadge,
     StepIndicator,
     SuggestionList,
@@ -228,70 +225,60 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
             </div>
 
             @if (requirements().length > 0) {
-              <div class="mt-4">
-                <h3 class="text-sm font-semibold text-slate-900">Requirements from the posting</h3>
-                <ul class="mt-2 flex flex-col gap-1.5">
-                  @for (requirement of requirements(); track $index) {
-                    <li
-                      class="flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-2.5"
-                    >
-                      <span
-                        class="mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium"
-                        [class]="requirementStatusTone(requirement.status)"
-                      >
-                        {{ REQUIREMENT_STATUS_LABEL[requirement.status] }}
-                      </span>
-                      <span class="min-w-0 flex-1">
-                        <span class="block text-sm text-slate-700">{{ requirement.text }}</span>
-                        @if (requirement.cvEvidence) {
-                          <span class="mt-0.5 block text-xs text-slate-500"
-                            >CV: “{{ requirement.cvEvidence }}”</span
-                          >
-                        }
-                      </span>
-                      <span class="mt-0.5 shrink-0 text-xs text-slate-400">{{
-                        REQUIREMENT_TYPE_LABEL[requirement.type]
-                      }}</span>
-                    </li>
-                  }
-                </ul>
-              </div>
+              <app-requirement-list
+                [requirements]="requirements()"
+                title="Requirements from the posting"
+              />
             }
           </section>
         }
 
         <!-- Step 2 — Review changes: suggestions; approval is only possible while AWAITING_REVIEW. -->
-        @if (viewedStep() === 1 && analysis.suggestions.length > 0) {
+        @if (viewedStep() === 1 && analysis.score !== null) {
           <section class="mt-6">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <h3 class="text-sm font-semibold text-slate-900">Suggested changes</h3>
-              @if (reviewing()) {
-                <div class="flex gap-2 text-xs">
-                  <button
-                    type="button"
-                    class="rounded-md px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50"
-                    (click)="selectAll(analysis)"
-                  >
-                    Select all
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded-md px-2 py-1 font-medium text-slate-500 hover:bg-slate-100"
-                    (click)="selectNone()"
-                  >
-                    Select none
-                  </button>
-                </div>
-              }
-            </div>
+            <app-requirement-list
+              [requirements]="requirements()"
+              title="What the analysis was based on"
+            />
 
-            <div class="mt-2 flex flex-col gap-2">
-              <app-suggestion-list
-                [suggestions]="analysis.suggestions"
-                [selectedIds]="selectedIds()"
-                (toggled)="toggleSuggestion($event)"
-              />
-            </div>
+            @if (analysis.suggestions.length > 0) {
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold text-slate-900">Suggested changes</h3>
+                @if (reviewing()) {
+                  <div class="flex gap-2 text-xs">
+                    <button
+                      type="button"
+                      class="rounded-md px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50"
+                      (click)="selectAll(analysis)"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-md px-2 py-1 font-medium text-slate-500 hover:bg-slate-100"
+                      (click)="selectNone()"
+                    >
+                      Select none
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="mt-2 flex flex-col gap-2">
+                <app-suggestion-list
+                  [suggestions]="analysis.suggestions"
+                  [selectedIds]="selectedIds()"
+                  (toggled)="toggleSuggestion($event)"
+                />
+              </div>
+            } @else {
+              <p
+                class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500"
+              >
+                No changes suggested — your CV already covers the posting's requirements. You can
+                still generate an ATS-formatted version.
+              </p>
+            }
 
             @if (reviewing()) {
               @if (analyses.actionError(); as message) {
@@ -304,17 +291,21 @@ import { SuggestionList } from '../../shared/suggestion-list/suggestion-list';
                 type="button"
                 class="mt-4 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 [class]="
-                  selectedCount() > 0
+                  canApply()
                     ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                     : 'border border-slate-300 text-slate-400'
                 "
-                [disabled]="selectedCount() === 0"
+                [disabled]="!canApply()"
                 (click)="apply(analysis)"
               >
-                Apply selected changes
-                <span class="font-normal"
-                  >· {{ selectedCount() }} of {{ analysis.suggestions.length }} selected</span
-                >
+                @if (analysis.suggestions.length > 0) {
+                  Apply selected changes
+                  <span class="font-normal"
+                    >· {{ selectedCount() }} of {{ analysis.suggestions.length }} selected</span
+                  >
+                } @else {
+                  Generate improved CV
+                }
               </button>
             }
           </section>
@@ -423,6 +414,16 @@ export class AnalysisDetail {
 
   /** True while suggestions can still be approved (docs/API.md §4). */
   protected readonly reviewing = computed(() => this.detail()?.stage === 'AWAITING_REVIEW');
+
+  /**
+   * Whether the step-2 action can run: at least one selected suggestion, or none at all when the
+   * evaluation proposed no changes (the analyze prompt allows an empty list — docs/API.md §4).
+   */
+  protected readonly canApply = computed(() => {
+    const analysis = this.detail();
+    if (!analysis || !this.reviewing()) return false;
+    return analysis.suggestions.length === 0 || this.selectedIds().size > 0;
+  });
 
   /**
    * Number of leading steps with a persisted result: 0 before evaluation, 2 after it, 3 once a
@@ -590,8 +591,13 @@ export class AnalysisDetail {
   }
 
   apply(analysis: Detail): void {
-    if (this.selectedIds().size === 0) return;
-    this.analyses.apply(analysis.id, [...this.selectedIds()]);
+    if (analysis.suggestions.length > 0) {
+      if (this.selectedIds().size === 0) return;
+      this.analyses.apply(analysis.id, [...this.selectedIds()]);
+      return;
+    }
+    // No suggestions: still start the rewrite so the ATS-formatted CV can be generated.
+    this.analyses.apply(analysis.id, []);
   }
 
   retry(analysis: Detail): void {
@@ -615,13 +621,6 @@ export class AnalysisDetail {
 
   protected readonly formatDateTime = formatDateTime;
   protected readonly errorMessage = errorMessage;
-
-  protected readonly REQUIREMENT_STATUS_LABEL = REQUIREMENT_STATUS_LABEL;
-  protected readonly REQUIREMENT_TYPE_LABEL = REQUIREMENT_TYPE_LABEL;
-
-  protected requirementStatusTone(status: RequirementStatus): string {
-    return REQUIREMENT_STATUS_TONE[status];
-  }
 }
 
 /** Error codes whose failure happened in the FETCHING_POSTING stage (docs/API.md §5). */
@@ -658,23 +657,4 @@ const SHORT_STAGE_LABELS: Record<AnalysisStage, string> = {
   COMPLETED: 'Ready',
   FAILED: 'Failed',
   CANCELLED: 'Cancelled',
-};
-
-/** Requirement coverage badges (docs/API.md §4). */
-const REQUIREMENT_STATUS_LABEL: Record<RequirementStatus, string> = {
-  MET: 'Met',
-  PARTIAL: 'Partial',
-  MISSING: 'Missing',
-};
-
-const REQUIREMENT_STATUS_TONE: Record<RequirementStatus, string> = {
-  MET: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  PARTIAL: 'border-amber-200 bg-amber-50 text-amber-700',
-  MISSING: 'border-red-200 bg-red-50 text-red-700',
-};
-
-const REQUIREMENT_TYPE_LABEL: Record<RequirementType, string> = {
-  MUST: 'Must-have',
-  NICE: 'Nice to have',
-  SOFT: 'Soft',
 };

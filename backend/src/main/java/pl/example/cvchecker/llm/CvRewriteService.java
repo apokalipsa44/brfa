@@ -2,6 +2,7 @@ package pl.example.cvchecker.llm;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -38,18 +39,21 @@ public class CvRewriteService {
     private final String jsonSchema;
     private final String reasoningEffort;
     private final int maxOutputTokens;
+    private final Duration requestTimeout;
     private final LlmStructuredCaller caller;
 
     public CvRewriteService(ChatClient.Builder builder, ObjectMapper mapper, LlmStructuredCaller caller,
             @Value("classpath:/prompts/rewrite.st") Resource rewritePrompt,
             @Value("classpath:/prompts/rewrite.schema.json") Resource rewriteSchema,
             @Value("${cvchecker.llm.reasoning-effort:none}") String reasoningEffort,
-            @Value("${cvchecker.llm.max-output-tokens:4096}") int maxOutputTokens) {
+            @Value("${cvchecker.llm.max-output-tokens:4096}") int maxOutputTokens,
+            @Value("${cvchecker.llm.read-timeout:10m}") Duration requestTimeout) {
         this.chat = builder.build();
         this.mapper = mapper;
         this.caller = caller;
         this.reasoningEffort = reasoningEffort;
         this.maxOutputTokens = maxOutputTokens;
+        this.requestTimeout = requestTimeout;
         try {
             this.basePrompt = new String(rewritePrompt.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             this.jsonSchema = new String(rewriteSchema.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -74,8 +78,8 @@ public class CvRewriteService {
     public CvRewriteResult rewrite(String cvText, String jobDescription, Evaluation evaluation,
             List<Suggestion> approvedSuggestions, String model, LlmTokenSink sink) {
         String contextJson;
+        List<Suggestion> approved = approvedSuggestions == null ? List.of() : approvedSuggestions;
         try {
-            List<Suggestion> approved = approvedSuggestions == null ? List.of() : approvedSuggestions;
             contextJson = mapper.writeValueAsString(new RewriteContext(
                     blankToNull(evaluation.employer()), blankToNull(evaluation.position()), approved));
         } catch (Exception e) {
@@ -84,7 +88,8 @@ public class CvRewriteService {
         // Shared context first (byte-identical to the evaluation step's) so the backend can reuse its
         // KV cache across the two calls; the step-specific instructions and suggestions follow.
         String prompt = SharedContext.of(cvText, jobDescription) + basePrompt
-                + "\n<approved-suggestions>\n" + contextJson + "\n</approved-suggestions>";
+                + "\n<approved-suggestions>\n" + contextJson + "\n</approved-suggestions>"
+                + noChangesDirective(approved);
         Exception lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             if (Thread.currentThread().isInterrupted()) {
@@ -134,6 +139,22 @@ public class CvRewriteService {
         return value == null || value.isBlank() ? null : value;
     }
 
+    /**
+     * With no approved suggestions the rewrite must be a pure ATS normalization (docs/API.md §4):
+     * the analyze prompt may return an empty list, and the "generate ATS-formatted version" path
+     * must not smuggle in content edits driven by the posting. Only the formatting rules from
+     * rewrite.st (headline, category-prefixed skills, dates, single-column bullets) may apply.
+     */
+    private static String noChangesDirective(List<Suggestion> approved) {
+        if (!approved.isEmpty()) {
+            return "";
+        }
+        return "\n\nThere are NO approved suggestions: apply none. Keep the CV's wording, order and "
+                + "facts exactly as in the original and do not add keywords from the job posting. Only "
+                + "the ATS typesetting normalizations from the rules above (HEADLINE, category-prefixed "
+                + "SKILLS, consistent dates, single-column bullets) may change; list just those in `changes`.";
+    }
+
     /** Attempts ≥ 2 get a corrective hint (plan §6.7): the model must re-emit truly minimal JSON. */
     private static String retryHint(int attempt) {
         return attempt >= 2
@@ -150,6 +171,7 @@ public class CvRewriteService {
         OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder()
                 .temperature(0.2)
                 .maxTokens(maxOutputTokens)
+                .timeout(requestTimeout)
                 .responseFormat(OpenAiChatModel.ResponseFormat.builder()
                         .type(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA)
                         .jsonSchema(jsonSchema)

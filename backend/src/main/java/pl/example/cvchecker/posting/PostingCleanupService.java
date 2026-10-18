@@ -2,6 +2,7 @@ package pl.example.cvchecker.posting;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,13 +39,16 @@ public class PostingCleanupService {
     private final String basePrompt;
     private final String jsonSchema;
     private final String reasoningEffort;
+    private final Duration requestTimeout;
 
     public PostingCleanupService(ChatClient.Builder builder,
             @Value("classpath:/prompts/posting.st") Resource postingPrompt,
             @Value("classpath:/prompts/posting.schema.json") Resource postingSchema,
-            @Value("${cvchecker.llm.reasoning-effort:none}") String reasoningEffort) {
+            @Value("${cvchecker.llm.reasoning-effort:none}") String reasoningEffort,
+            @Value("${cvchecker.llm.read-timeout:10m}") Duration requestTimeout) {
         this.chat = builder.build();
         this.reasoningEffort = reasoningEffort;
+        this.requestTimeout = requestTimeout;
         try {
             this.basePrompt = new String(postingPrompt.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             this.jsonSchema = new String(postingSchema.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -105,6 +109,7 @@ public class PostingCleanupService {
         OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder()
                 .temperature(0.1)
                 .maxTokens(MAX_OUTPUT_TOKENS)
+                .timeout(requestTimeout)
                 .responseFormat(OpenAiChatModel.ResponseFormat.builder()
                         .type(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA)
                         .jsonSchema(jsonSchema)

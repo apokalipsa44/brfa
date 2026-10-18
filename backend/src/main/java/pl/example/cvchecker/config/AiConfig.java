@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.openai.core.Timeout;
+
 import pl.example.cvchecker.llm.LlmCallInterceptor;
 
 /**
@@ -20,10 +22,28 @@ import pl.example.cvchecker.llm.LlmCallInterceptor;
 @Configuration
 public class AiConfig {
 
+    /**
+     * {@code builder.timeout(Duration)} only sets the SDK's <em>request</em> timeout (OkHttp
+     * {@code callTimeout}), leaving {@code connect}/{@code read}/{@code write} at the SDK default
+     * (60 s). A large prompt on a cold model takes longer than that before the first streamed token,
+     * which killed the evaluation/rewrite with {@code Stream failed}. Set every dimension explicitly.
+     * <p>
+     * Note this client-level timeout is only a floor: Spring AI sends
+     * {@code OpenAiChatOptions.timeout} as a per-request {@code RequestOptions} that overrides it,
+     * and that option defaults to 60 s — hence the LLM services also set it from
+     * {@code cvchecker.llm.read-timeout} (docs/DECISIONS.md).
+     */
     @Bean
     OpenAiHttpClientBuilderCustomizer cvCheckerLlmTimeouts(
-            @Value("${cvchecker.llm.read-timeout:10m}") Duration readTimeout) {
-        return builder -> builder.timeout(readTimeout);
+            @Value("${cvchecker.llm.read-timeout:10m}") Duration readTimeout,
+            @Value("${cvchecker.llm.connect-timeout:10s}") Duration connectTimeout) {
+        Timeout timeout = Timeout.builder()
+                .connect(connectTimeout)
+                .read(readTimeout)
+                .write(readTimeout)
+                .request(readTimeout)
+                .build();
+        return builder -> builder.timeout(timeout);
     }
 
     @Bean
@@ -31,3 +51,4 @@ public class AiConfig {
         return builder -> builder.interceptor(new LlmCallInterceptor());
     }
 }
+

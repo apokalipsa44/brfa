@@ -162,6 +162,7 @@ load), probes it and returns the resulting state:
   shows the state instead of a crash. A `models.updated` SSE event is broadcast.
 - **400** `MODEL_BLANK` — `modelId` missing/blank.
 - **400** `MODEL_NOT_FOUND` — the id is not among the models LM Studio knows.
+- **409** `MODEL_SWITCH_BUSY` — an analysis is running; finish or cancel it before switching (§6.3).
 
 ---
 
@@ -402,10 +403,15 @@ Body:
 Starts `REWRITING` with **only** the approved suggestions (unknown ids are ignored). The rewrite
 must not apply anything else; missing requirements stay out of the CV (§6.1).
 
+The analyze prompt may legitimately return an empty suggestions list (§6.1: "if nothing is worth
+changing"). When the evaluation proposed no suggestions the body may be empty (or `{}`): the CV is
+still regenerated — re-typeset for ATS with no content change — so the flow can reach the improved
+CV instead of dead-ending at the review step.
+
 - **202**: the updated summary (stage `REWRITING`).
 - **409** `NOT_AWAITING_REVIEW` — the analysis is not in `AWAITING_REVIEW`.
-- **422** `NO_SUGGESTIONS_APPROVED` — empty list; approving nothing is rejected so the CV is never
-  regenerated unchanged.
+- **422** `NO_SUGGESTIONS_APPROVED` — an empty list or only unknown ids while the evaluation *did*
+  propose suggestions; approving nothing there is rejected so the CV is not regenerated unchanged.
 - **404** `ANALYSIS_NOT_FOUND`.
 
 ### `POST /api/analyses/{id}/retry` — re-run the interrupted or failed stage
@@ -459,6 +465,7 @@ the one snapshotted at creation (no re-snapshot).
 | `CV_NOT_FOUND` | 404 | No active CV; upload one first |
 | `MODEL_BLANK` | 400 | `modelId` missing in the request body |
 | `MODEL_NOT_FOUND` | 400 | `modelId` unknown to LM Studio |
+| `MODEL_SWITCH_BUSY` | 409 | switch refused while an analysis is running (see §6.3) |
 | `LLM_UNREACHABLE` | 502 | LM Studio down or not answering (model management) |
 | `POSTING_REQUIRED` | 422 | neither `jobPosting` nor `jobPostingUrl` given |
 | `POSTING_SOURCE_CONFLICT` | 422 | both `jobPosting` and `jobPostingUrl` given |
@@ -472,14 +479,14 @@ the one snapshotted at creation (no re-snapshot).
 | `APPLIED_AT_INVALID` | 422 | `PATCH` with a malformed `appliedAt` |
 | `APPLIED_AT_FUTURE` | 422 | `PATCH` with an `appliedAt` after today |
 | `NOT_AWAITING_REVIEW` | 409 | `apply` while not awaiting review |
-| `NO_SUGGESTIONS_APPROVED` | 422 | `apply` with an empty approval list |
+| `NO_SUGGESTIONS_APPROVED` | 422 | `apply` with an empty/unknown approval list while suggestions exist |
 | `NOT_RETRYABLE` | 409 | `retry` while neither failed nor cancelled |
 | `NOT_RERUNNABLE` | 409 | `rerun` on a pasted analysis or one that is currently running |
 | `NOT_CANCELLABLE` | 409 | `cancel` while not in a cancellable stage |
 | `NOT_READY` | 409 | result requested before completion |
 | `RESULT_NOT_FOUND` | 404 | completed but the file was cleaned up |
 | `LLM_INVALID_OUTPUT` | 502 | model output failed validation after max retries — retry |
-| `LLM_ABORTED` | 502 | LLM call interrupted (e.g. model switch during the call) — retry after the switch |
+| `LLM_ABORTED` | 502 | LLM call aborted because the analysis run was cancelled — restart the run |
 | `INTERNAL_ERROR` | 500 | unexpected failure — retry |
 
 **Stage error codes** (they appear in `errorCode` after the stage fails, not as HTTP responses; the
@@ -519,14 +526,14 @@ after a link fetch.
 Analyses run through one bounded executor (a local model handles one request at a time). Each
 analysis records the model active **at creation** and sends that id with every LLM request.
 
-Because LM Studio hosts **one** loaded model, a switch unloads the current one first:
+Because LM Studio hosts **one** loaded model, a switch unloads the current one first — which would
+abort any analysis using it. The switch is therefore **refused with `409 MODEL_SWITCH_BUSY`** while
+an analysis is running:
 
-- New analyses use whatever is loaded when they start.
-- A switch during an **in-flight LLM call** can abort that call; the analysis then fails with
-  `LLM_ABORTED` and the user retries after the switch.
-- Analyses in `AWAITING_REVIEW` / `COMPLETED` are unaffected (no LLM work pending).
-- UI guidance: prefer to switch before starting analyses; the model picker flags this while
-  analyses are active.
+- A run counts as running while it is in a cancellable stage (`QUEUED`…`GENERATING_PDF`).
+- Analyses in `AWAITING_REVIEW` / `COMPLETED` (and other terminal stages) are unaffected — no LLM
+  work is pending, so switching is allowed then.
+- UI guidance: switch before starting analyses; the model picker is disabled while an analysis runs.
 
 ### 6.4 Short description of the position
 

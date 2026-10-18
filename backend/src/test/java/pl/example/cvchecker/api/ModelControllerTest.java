@@ -9,10 +9,16 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import pl.example.cvchecker.analysis.Analysis;
+import pl.example.cvchecker.analysis.AnalysisRegistry;
+import pl.example.cvchecker.analysis.AnalysisStage;
 import pl.example.cvchecker.llm.ModelContextService;
 import pl.example.cvchecker.llm.ModelInfo;
 import pl.example.cvchecker.llm.ModelState;
 
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -32,6 +38,9 @@ class ModelControllerTest {
 
     @MockitoBean
     ModelContextService models;
+
+    @MockitoBean
+    AnalysisRegistry analyses;
 
     @Test
     void modelStateReturnsCandidatesActiveAndReady() throws Exception {
@@ -99,5 +108,37 @@ class ModelControllerTest {
         mvc.perform(put("/api/llm/active-model").contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").exists());
+    }
+
+    /** A switch would unload the model a running analysis uses, so it is refused (docs/API.md §6.3). */
+    @Test
+    void switchWhileAnalysisRunningReturns409() throws Exception {
+        Analysis running = mock(Analysis.class);
+        when(running.stage()).thenReturn(AnalysisStage.EVALUATING);
+        when(analyses.findAll()).thenReturn(List.of(running));
+
+        mvc.perform(put("/api/llm/active-model")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"modelId\":\"qwen/iq3_s.gguf\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MODEL_SWITCH_BUSY"));
+
+        verify(models, never()).select(anyString());
+    }
+
+    /** An analysis paused for review holds no model work, so switching is allowed (docs/API.md §6.3). */
+    @Test
+    void switchWhileAnalysisAwaitingReviewIsAllowed() throws Exception {
+        Analysis awaiting = mock(Analysis.class);
+        when(awaiting.stage()).thenReturn(AnalysisStage.AWAITING_REVIEW);
+        when(analyses.findAll()).thenReturn(List.of(awaiting));
+        when(models.select("qwen/iq3_s.gguf")).thenReturn(
+                new ModelState(List.of(new ModelInfo("qwen/iq3_s.gguf", true)), "qwen/iq3_s.gguf", true, null));
+
+        mvc.perform(put("/api/llm/active-model")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"modelId\":\"qwen/iq3_s.gguf\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeModelId").value("qwen/iq3_s.gguf"));
     }
 }
