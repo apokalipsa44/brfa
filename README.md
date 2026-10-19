@@ -5,7 +5,7 @@ A local job-application assistant: upload your CV as a PDF, pick an LLM served b
 the gaps, and suggests concrete changes. Once you approve the edits, it renders a new ATS-friendly
 PDF. Everything runs on your machine — no data leaves it.
 
-![Analysis view](docs/screenshots/analysis.png)
+![Analysis view](assets/screenshots/analysis.png)
 
 ## Features
 
@@ -23,8 +23,8 @@ PDF. Everything runs on your machine — no data leaves it.
   in sync across open tabs.
 - **Persistence** — analyses and skill gaps are stored in a local SQLite database.
 
-![Review changes](docs/screenshots/review.png)
-![Skill gaps](docs/screenshots/gaps.png)
+![Review changes](assets/screenshots/review.png)
+![Skill gaps](assets/screenshots/gaps.png)
 
 ## How it works
 
@@ -142,14 +142,7 @@ npx ng test --watch=false
 ## Project structure
 
 ```
-backend/     Spring Boot API, analysis pipeline, LLM, PDF, SQLite
-frontend/    Angular SPA (workspace: analyses, CV, model, skill gaps)
-docs/        API.md (REST/SSE contract), DECISIONS.md, ENVIRONMENT.md, screenshots/
-PLAN.en.md   implementation plan and architecture
+backend/            Spring Boot API, analysis pipeline, LLM, PDF, SQLite
+frontend/           Angular SPA (workspace: analyses, CV, model, skill gaps)
+assets/screenshots/ Images used by this README
 ```
-
-## Documentation
-
-- [`docs/API.md`](docs/API.md) — full REST/SSE contract (source of truth for API changes).
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — technical decision log.
-- [`PLAN.en.md`](PLAN.en.md) — plan and architecture (partly historical).

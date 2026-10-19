@@ -20,3 +20,6 @@ frontend/.angular/
 .playwright-cli/
 test data/
 .opencode/skills/
+AGENTS.md
+docs/
+.opencode/
