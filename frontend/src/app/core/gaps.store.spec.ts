@@ -4,7 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 
 import { GapsStore } from './gaps.store';
 import { ToastStore } from './toast.store';
-import { GapItem } from './models';
+import { GapItem, GroupedSkill, SkillClusters } from './models';
 
 function gap(id: string, overrides: Partial<GapItem> = {}): GapItem {
   return {
@@ -20,6 +20,24 @@ function gap(id: string, overrides: Partial<GapItem> = {}): GapItem {
     updatedAt: '2026-10-18T10:00:00Z',
     ...overrides,
   };
+}
+
+function cluster(id: string, overrides: Partial<GroupedSkill> = {}): GroupedSkill {
+  return {
+    id,
+    label: `Skill ${id}`,
+    importance: 3,
+    rationale: 'because',
+    occurrences: 2,
+    kind: 'MISSING',
+    members: [{ text: `Gap ${id}`, kind: 'MISSING', occurrences: 2 }],
+    updatedAt: '2026-10-18T10:00:00Z',
+    ...overrides,
+  };
+}
+
+function clusterState(clusters: GroupedSkill[]): SkillClusters {
+  return { running: false, lastRunAt: '2026-10-18T10:00:00Z', lastError: null, clusters };
 }
 
 describe('GapsStore', () => {
@@ -107,5 +125,90 @@ describe('GapsStore', () => {
 
     http.expectOne('/api/skill-gaps/g1').flush(null, { status: 204, statusText: 'No Content' });
     http.expectOne('/api/skill-gaps').flush([gap('g2')]);
+  });
+
+  it('loads the grouped skills', () => {
+    store.loadClusters();
+    http.expectOne('/api/skill-gaps/clusters').flush(clusterState([cluster('c1')]));
+
+    expect(store.clusters()).toHaveLength(1);
+    expect(store.clusters()[0].label).toBe('Skill c1');
+    expect(store.lastRunAt()).toBe('2026-10-18T10:00:00Z');
+    expect(store.clustersLoading()).toBe(false);
+  });
+
+  it('regroups and replaces the clusters', () => {
+    store.rebuildClusters();
+    expect(store.rebuilding()).toBe(true);
+
+    const request = http.expectOne('/api/skill-gaps/clusters/rebuild');
+    expect(request.request.method).toBe('POST');
+    request.flush(clusterState([cluster('c1', { importance: 5 })]));
+
+    expect(store.clusters()[0].importance).toBe(5);
+    expect(store.rebuilding()).toBe(false);
+  });
+
+  it('shows a friendly message when regrouping is already running', () => {
+    store.rebuildClusters();
+    http
+      .expectOne('/api/skill-gaps/clusters/rebuild')
+      .flush(
+        { code: 'REBUILD_RUNNING', detail: 'already running' },
+        { status: 409, statusText: 'Conflict' },
+      );
+
+    expect(store.rebuilding()).toBe(false);
+    expect(store.clustersError()).toContain('progress');
+    expect(toast.message()).toContain('progress');
+  });
+
+  it('renames a grouped skill and reconciles with the refreshed payload', () => {
+    store.loadClusters();
+    http.expectOne('/api/skill-gaps/clusters').flush(clusterState([cluster('c1', { label: 'Old' })]));
+
+    store.renameCluster('c1', 'Kubernetes');
+    expect(store.clusters()[0].label).toBe('Kubernetes');
+
+    const request = http.expectOne('/api/skill-gaps/clusters/c1');
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ label: 'Kubernetes' });
+    request.flush(clusterState([cluster('c1', { label: 'Kubernetes' })]));
+
+    expect(store.clusters()[0].label).toBe('Kubernetes');
+  });
+
+  it('rolls back an optimistic cluster rename when the save fails', () => {
+    store.loadClusters();
+    http.expectOne('/api/skill-gaps/clusters').flush(clusterState([cluster('c1', { label: 'Old' })]));
+
+    store.renameCluster('c1', '');
+    expect(store.clusters()[0].label).toBe('');
+    http
+      .expectOne('/api/skill-gaps/clusters/c1')
+      .flush(
+        { code: 'CLUSTER_LABEL_BLANK', detail: 'blank' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+
+    expect(store.clusters()[0].label).toBe('Old');
+    expect(store.clustersError()).toContain('label');
+  });
+
+  it('removes a grouped skill then reloads the list and clusters', () => {
+    store.loadClusters();
+    http
+      .expectOne('/api/skill-gaps/clusters')
+      .flush(clusterState([cluster('c1'), cluster('c2')]));
+
+    store.removeCluster('c1');
+    expect(store.clusters().map((c) => c.id)).toEqual(['c2']);
+
+    http.expectOne('/api/skill-gaps/clusters/c1').flush(null, { status: 204, statusText: 'No Content' });
+    http.expectOne('/api/skill-gaps').flush([gap('g2')]);
+    http.expectOne('/api/skill-gaps/clusters').flush(clusterState([cluster('c2')]));
+
+    expect(store.clusters().map((c) => c.id)).toEqual(['c2']);
+    expect(store.items().map((g) => g.id)).toEqual(['g2']);
   });
 });

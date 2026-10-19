@@ -1,33 +1,76 @@
-import { ChangeDetectionStrategy, Component, computed, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 
+import { CvContextStore } from '../../core/cv-context.store';
+import { CvImprovementStore } from '../../core/cv-improvement.store';
 import { GapsStore } from '../../core/gaps.store';
-import { GapItem, GapKind, GapStatus, MAX_GAP_NOTE_CHARS, MAX_GAP_TEXT_CHARS } from '../../core/models';
+import { formatDateTime } from '../../core/format';
+import {
+  GapItem,
+  GapKind,
+  GapStatus,
+  GroupedSkill,
+  MAX_GAP_NOTE_CHARS,
+  MAX_GAP_TEXT_CHARS,
+} from '../../core/models';
+import { InlineTitleEdit } from '../../shared/inline-title-edit/inline-title-edit';
 
 /**
  * Skill gaps (docs/API.md §9): what the CV is missing and the nice-to-haves aggregated across every
- * analysed posting, plus the user's own entries. Basic CRUD: add a gap, rename/re-classify it, set a
- * status and a note, remove it. Opening the view (re)loads the aggregation from the backend.
+ * analysed posting, plus the user's own entries. Two views: the grouped + ranked skills the background
+ * job folds and scores (the default), and the curated list (add / rename / classify / annotate / remove
+ * a gap). The grouped view also lets the user tick skills and build a standalone improved CV (§10).
  */
 @Component({
   selector: 'app-skill-gaps',
+  imports: [InlineTitleEdit],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './skill-gaps.html',
 })
 export class SkillGaps {
   protected readonly gaps = inject(GapsStore);
-
-  readonly closed = output<void>();
+  protected readonly improvement = inject(CvImprovementStore);
+  protected readonly cv = inject(CvContextStore);
 
   protected readonly maxText = MAX_GAP_TEXT_CHARS;
   protected readonly maxNote = MAX_GAP_NOTE_CHARS;
   protected readonly KIND_LABEL = KIND_LABEL;
   protected readonly STATUS_LABEL = STATUS_LABEL;
   protected readonly STATUSES: GapStatus[] = ['OPEN', 'PLANNED', 'LEARNED'];
+  protected readonly formatDateTime = formatDateTime;
 
+  protected readonly mode = signal<'list' | 'grouped'>('grouped');
   protected readonly filter = signal<GapKind | 'ALL'>('ALL');
   protected readonly newText = signal('');
   protected readonly newKind = signal<GapKind>('MISSING');
   private readonly _collapsed = signal<ReadonlySet<GapStatus>>(new Set());
+
+  /** Ids of the grouped skills ticked for the next CV build. */
+  protected readonly selected = signal<ReadonlySet<string>>(new Set());
+  protected readonly selectedCount = computed(() => this.selected().size);
+
+  /** The grouped skill whose label is being renamed inline, if any. */
+  protected readonly editingClusterId = signal<string | null>(null);
+
+  /** Label for the build button: the running stage, or the pending selection count. */
+  protected readonly buildLabel = computed(() => {
+    const stage = this.improvement.state()?.stage;
+    if (stage === 'REWRITING') return 'Rewriting the CV…';
+    if (stage === 'RENDERING') return 'Rendering the PDF…';
+    const count = this.selectedCount();
+    return count === 0 ? 'Build improved CV' : `Build improved CV (${count})`;
+  });
+
+  /** True when a build could start: a CV and a ready model exist and a skill is ticked (§10). */
+  protected readonly canBuild = computed(
+    () => this.cv.hasCv() && this.cv.ready() && this.selectedCount() > 0,
+  );
+
+  /** One-line reason why the build button is disabled (mirrors the analysis form). */
+  protected readonly buildHint = computed<string | null>(() => {
+    if (!this.cv.hasCv()) return 'Upload a CV to continue.';
+    if (!this.cv.ready()) return this.cv.reason() ?? 'Load a model in LM Studio to continue.';
+    return null;
+  });
 
   protected readonly visible = computed(() => {
     const active = this.filter();
@@ -69,6 +112,8 @@ export class SkillGaps {
 
   constructor() {
     this.gaps.load();
+    this.gaps.loadClusters(); // grouped is the default view
+    this.improvement.load();
   }
 
   protected isCollapsed(status: GapStatus): boolean {
@@ -86,6 +131,73 @@ export class SkillGaps {
 
   protected setFilter(value: GapKind | 'ALL'): void {
     this.filter.set(value);
+  }
+
+  /** Switches between the grouped overview (default, loaded up front) and the curated list. */
+  protected setMode(mode: 'list' | 'grouped'): void {
+    this.mode.set(mode);
+  }
+
+  /** Regroups + ranks the gaps now (synchronous on the backend; the button shows a spinner). */
+  protected rebuild(): void {
+    this.selected.set(new Set()); // ids change after a regroup
+    this.gaps.rebuildClusters();
+  }
+
+  protected isSelected(id: string): boolean {
+    return this.selected().has(id);
+  }
+
+  protected toggleSelected(id: string): void {
+    this.selected.update((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Builds a standalone improved CV from the active CV plus the ticked grouped skills (§10). */
+  protected buildCv(): void {
+    if (!this.canBuild()) return;
+    const labels = this.gaps
+      .clusters()
+      .filter((cluster) => this.selected().has(cluster.id))
+      .map((cluster) => cluster.label);
+    if (labels.length === 0) return;
+    this.improvement.start(labels);
+  }
+
+  /** Opens the inline label editor for one grouped skill. */
+  protected startRenameCluster(id: string): void {
+    this.editingClusterId.set(id);
+  }
+
+  protected cancelRenameCluster(): void {
+    this.editingClusterId.set(null);
+  }
+
+  /** Saves a renamed grouped-skill label (no-op when unchanged). */
+  protected saveClusterName(cluster: GroupedSkill, label: string): void {
+    this.editingClusterId.set(null);
+    if (label !== cluster.label) this.gaps.renameCluster(cluster.id, label);
+  }
+
+  /** Removes a grouped skill (and its gaps); drops it from the pending CV selection too. */
+  protected removeCluster(cluster: GroupedSkill): void {
+    this.selected.update((current) => {
+      if (!current.has(cluster.id)) return current;
+      const next = new Set(current);
+      next.delete(cluster.id);
+      return next;
+    });
+    this.gaps.removeCluster(cluster.id);
+  }
+
+  /** 1-5 importance as filled/empty stars for the grouped rows. */
+  protected stars(importance: number): string {
+    const filled = Math.max(0, Math.min(5, Math.round(importance)));
+    return '★'.repeat(filled) + '☆'.repeat(5 - filled);
   }
 
   /** Creates the gap typed into the add form; ignores an empty value. */

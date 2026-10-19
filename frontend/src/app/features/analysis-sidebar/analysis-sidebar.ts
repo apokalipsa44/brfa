@@ -13,6 +13,7 @@ import { AnalysisCard } from './analysis-card';
   selector: 'app-analysis-sidebar',
   imports: [AnalysisCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { class: 'flex min-h-0 flex-1 flex-col' },
   templateUrl: './analysis-sidebar.html',
 })
 export class AnalysisSidebar {

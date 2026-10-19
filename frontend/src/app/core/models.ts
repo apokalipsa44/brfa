@@ -137,6 +137,53 @@ export interface GapItem {
   updatedAt: string;
 }
 
+/** One underlying gap phrasing folded into a grouped skill (docs/API.md §9). */
+export interface GroupedSkillMember {
+  text: string;
+  kind: GapKind;
+  occurrences: number;
+}
+
+/** One canonical, ranked skill grouped from every gap phrasing (docs/API.md §9). */
+export interface GroupedSkill {
+  id: string;
+  label: string;
+  /** The model's importance score, 1-5 (docs/API.md §9). */
+  importance: number;
+  rationale: string;
+  /** Sum of the member gaps' occurrences (each phrasing counts). */
+  occurrences: number;
+  kind: GapKind;
+  members: GroupedSkillMember[];
+  updatedAt: string;
+}
+
+/** Grouped skills plus the background regrouping job's state (docs/API.md §9). */
+export interface SkillClusters {
+  running: boolean;
+  lastRunAt: string | null;
+  lastError: string | null;
+  clusters: GroupedSkill[];
+}
+
+/** Stage of the standalone CV build (docs/API.md §10). */
+export type CvImprovementStage = 'NONE' | 'REWRITING' | 'RENDERING' | 'COMPLETED' | 'FAILED';
+
+/** The standalone CV build's current state (docs/API.md §10). */
+export interface CvImprovementState {
+  stage: CvImprovementStage;
+  skills: string[];
+  modelId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  resultUrl: string | null;
+}
+
+/** Maximum number of skills the CV builder accepts (docs/API.md §10). */
+export const MAX_IMPROVEMENT_SKILLS = 30;
+
 /** Maximum skill-gap text length enforced by the backend (docs/API.md §9). */
 export const MAX_GAP_TEXT_CHARS = 300;
 

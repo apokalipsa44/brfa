@@ -12,14 +12,15 @@ import { AnalysisDetail } from '../analysis-detail/analysis-detail';
 import { SkillGaps } from '../skill-gaps/skill-gaps';
 import { Toast } from '../../shared/toast/toast';
 
-/** Main-panel views hosted inside the shell (the gaps view is a panel, not a route). */
-type View = 'workspace' | 'gaps';
+/** Main-panel tabs hosted inside the shell (the gaps curator is a panel, not a route). */
+type View = 'analysis' | 'gaps';
 
 /**
- * Workspace shell (docs/API.md UI): the top bar holds the persistent CV + model context, the sidebar
- * lists analyses, and the main panel shows the drop zone until a CV exists, then the new analysis
- * form or the selected analysis. The single SSE stream is opened once here, and a running analysis
- * is cancelled if the tab is closed or refreshed.
+ * Workspace shell (docs/API.md UI): the top bar holds the persistent CV + model context and a tab bar
+ * switches between the job-analysis workspace and the gaps curator. The job-analysis tab keeps the
+ * analyses sidebar and shows the drop zone until a CV exists, then the new analysis form or the
+ * selected analysis. The single SSE stream is opened once here, and a running analysis is cancelled if
+ * the tab is closed or refreshed.
  */
 @Component({
   selector: 'app-shell',
@@ -43,18 +44,23 @@ export class AppShell {
   private readonly pageLeaveGuard = inject(PageLeaveGuard);
 
   protected readonly sidebarOpen = signal(false);
-  protected readonly view = signal<View>('workspace');
+  protected readonly view = signal<View>('analysis');
 
   constructor() {
     this.events.connect();
-    // Selecting an analysis always returns to the workspace panel.
+    // Selecting an analysis always returns to the job-analysis tab.
     effect(() => {
-      if (this.analyses.selectedId()) this.view.set('workspace');
+      if (this.analyses.selectedId()) this.view.set('analysis');
     });
   }
 
+  protected setView(view: View): void {
+    this.view.set(view);
+    this.sidebarOpen.set(false);
+  }
+
   protected newAnalysis(): void {
-    this.view.set('workspace');
+    this.view.set('analysis');
     this.analyses.select(null);
     this.sidebarOpen.set(false);
   }

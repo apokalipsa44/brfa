@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { catchError, Observable, of, throwError } from 'rxjs';
-import { AnalysisDetail, AnalysisSummary, CvInfo, GapItem, GapKind, GapStatus, ModelState } from '../models';
+import { AnalysisDetail, AnalysisSummary, CvImprovementState, CvInfo, GapItem, GapKind, GapStatus, ModelState, SkillClusters } from '../models';
 
 /** The optional fields of a PATCH /api/skill-gaps/{id} (docs/API.md §9); at least one is sent. */
 export interface GapPatch {
@@ -118,6 +118,38 @@ export class WorkspaceApi {
   /** Removes a skill gap (docs/API.md §9). */
   deleteGap(id: string): Observable<void> {
     return this.http.delete<void>(`/api/skill-gaps/${encodeURIComponent(id)}`);
+  }
+
+  /** Grouped + ranked skills plus the regrouping job's state (docs/API.md §9). */
+  listSkillClusters(): Observable<SkillClusters> {
+    return this.http.get<SkillClusters>('/api/skill-gaps/clusters');
+  }
+
+  /** Runs the regrouping synchronously and returns the refreshed payload (docs/API.md §9). */
+  rebuildSkillClusters(): Observable<SkillClusters> {
+    return this.http.post<SkillClusters>('/api/skill-gaps/clusters/rebuild', {});
+  }
+
+  /** Renames one grouped skill's label (docs/API.md §9); returns the refreshed payload. */
+  renameSkillCluster(id: string, label: string): Observable<SkillClusters> {
+    return this.http.patch<SkillClusters>(`/api/skill-gaps/clusters/${encodeURIComponent(id)}`, {
+      label,
+    });
+  }
+
+  /** Removes a grouped skill and every underlying gap it grouped (docs/API.md §9). */
+  deleteSkillCluster(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/skill-gaps/clusters/${encodeURIComponent(id)}`);
+  }
+
+  /** Current standalone CV build state (docs/API.md §10); `NONE` until the first build. */
+  getCvImprovement(): Observable<CvImprovementState> {
+    return this.http.get<CvImprovementState>('/api/cv/improvement');
+  }
+
+  /** Starts a standalone CV build that adds the selected skills (docs/API.md §10). */
+  startCvImprovement(skills: string[]): Observable<CvImprovementState> {
+    return this.http.post<CvImprovementState>('/api/cv/improvement', { skills });
   }
 }
 

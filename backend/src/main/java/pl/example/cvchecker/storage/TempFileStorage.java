@@ -30,6 +30,11 @@ public class TempFileStorage {
         return file;
     }
 
+    /** Target path for one standalone CV build's PDF, named by its run id (docs/API.md §10). */
+    public Path cvImprovementPath(String runId) {
+        return root.resolve("cv-improved-" + runId + ".pdf");
+    }
+
     public Path root() {
         return root;
     }

@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "importance": { "type": "integer" },
+          "rationale": { "type": "string" }
+        },
+        "required": ["label", "importance", "rationale"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["skills"],
+  "additionalProperties": false
+}

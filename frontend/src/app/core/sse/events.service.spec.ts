@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { EventsService } from './events.service';
 import { AnalysesStore } from '../analyses.store';
+import { CvImprovementStore } from '../cv-improvement.store';
 import { expectCvContext, seedAnalyses } from '../../testing/workspace';
 
 /** A controllable EventSource stand-in simulating named SSE frames. */
@@ -112,6 +113,24 @@ describe('EventsService', () => {
     service.connect();
     FakeEventSource.last?.dispatch('cv.updated', {});
     http.expectOne('/api/cv').flush({ id: 'cv-2', fileName: 'new.pdf', status: 'READY' });
+  });
+
+  it('routes cv.improvement.updated into the store', () => {
+    service.connect();
+    FakeEventSource.last?.dispatch('cv.improvement.updated', {
+      stage: 'COMPLETED',
+      skills: ['Kubernetes'],
+      modelId: 'm1',
+      startedAt: '2026-10-18T10:00:00Z',
+      finishedAt: '2026-10-18T10:01:00Z',
+      errorCode: null,
+      errorMessage: null,
+      resultUrl: '/api/cv/improvement/result?v=run1',
+    });
+
+    const store = TestBed.inject(CvImprovementStore);
+    expect(store.state()?.stage).toBe('COMPLETED');
+    expect(store.state()?.resultUrl).toBe('/api/cv/improvement/result?v=run1');
   });
 
   it('stays quiet for the heartbeat ping', () => {

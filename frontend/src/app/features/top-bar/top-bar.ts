@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 
 import { CvContextStore } from '../../core/cv-context.store';
 import { CvChip } from '../cv-chip/cv-chip';
@@ -19,6 +19,8 @@ export class TopBar {
   protected readonly cv = inject(CvContextStore);
   protected readonly events = inject(EventsService);
 
+  /** The mobile analyses drawer toggle only makes sense on the job-analysis tab. */
+  readonly showSidebarToggle = input(true);
+
   readonly openSidebar = output();
-  readonly openSkillGaps = output();
 }

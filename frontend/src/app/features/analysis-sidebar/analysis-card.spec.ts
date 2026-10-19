@@ -62,6 +62,11 @@ describe('AnalysisCard', () => {
     ).toBeTruthy();
   });
 
+  it('shows when the analysis was updated as a date with time', () => {
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toMatch(/\d{1,2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}/);
+  });
+
   it('shows the applied marker only on review and completed analyses', () => {
     expect(fixture.nativeElement.querySelector('button[aria-pressed]')).toBeTruthy();
 

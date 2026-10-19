@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import { STAGE_LABELS, isWorking } from '../../core/analyses.store';
-import { relativeTime } from '../../core/format';
+import { formatDateTime } from '../../core/format';
 import { AnalysisSummary } from '../../core/models';
 import { AppliedToggle } from '../../shared/applied-toggle/applied-toggle';
 import { InlineTitleEdit } from '../../shared/inline-title-edit/inline-title-edit';
@@ -78,5 +78,5 @@ export class AnalysisCard {
     if (title !== this.summary().title) this.renamed.emit({ id: this.summary().id, title });
   }
 
-  protected readonly formatDate = relativeTime;
+  protected readonly formatDateTime = formatDateTime;
 }

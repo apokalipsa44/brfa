@@ -123,16 +123,7 @@ public class CvRewriteService {
 
     /** Rejects empty documents so bad JSON never reaches the PDF renderer. */
     void validate(CvRewriteResult result) {
-        if (result == null || result.document() == null || result.changes() == null) {
-            throw new LlmInvalidOutputException("Rewrite failed validation (null document/changes).", null);
-        }
-        CvDocument document = result.document();
-        boolean hasContent = (document.experience() != null && !document.experience().isEmpty())
-                || (document.skills() != null && !document.skills().isEmpty())
-                || (document.education() != null && !document.education().isEmpty());
-        if (document.fullName() == null || document.fullName().isBlank() || !hasContent) {
-            throw new LlmInvalidOutputException("Rewrite failed validation (empty name/content).", null);
-        }
+        CvRewriteValidator.validate(result);
     }
 
     private static String blankToNull(String value) {

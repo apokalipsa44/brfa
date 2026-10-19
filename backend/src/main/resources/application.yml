@@ -59,6 +59,9 @@ cvchecker:
   analyses:
     max-concurrent: 1   # a local LLM processes one analysis at a time (plan §6.7)
     ttl: 24h            # completed analyses and their result PDFs older than this are removed
+  skill-gaps:
+    group-every: 5          # auto-regroup after this many completed analyses (docs/API.md §9)
+    max-output-tokens: 8192 # grouping/ranking output is bigger than one evaluation (many skills)
   pipeline:
     mode: real          # real = PDFBox + LLM + PDF render; simulated = stage delays only (tests/demos)
     stage-delay: 2s     # simulated-pipeline delay per stage (only used when mode=simulated)

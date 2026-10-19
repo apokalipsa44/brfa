@@ -26,6 +26,7 @@ import jakarta.annotation.PreDestroy;
 import pl.example.cvchecker.analysis.AnalysisDeletedEvent;
 import pl.example.cvchecker.analysis.AnalysisOutputEvent;
 import pl.example.cvchecker.analysis.AnalysisUpdatedEvent;
+import pl.example.cvchecker.cv.CvImprovementUpdatedEvent;
 
 /**
  * The single, app-global SSE stream behind {@code GET /api/events} (docs/API.md §7). One emitter per
@@ -127,6 +128,11 @@ public class GlobalEventStream {
     @EventListener
     public void onCvUpdated(CvUpdatedEvent event) {
         publish("cv.updated", Map.of());
+    }
+
+    @EventListener
+    public void onCvImprovementUpdated(CvImprovementUpdatedEvent event) {
+        publish("cv.improvement.updated", event.state());
     }
 
     @PreDestroy

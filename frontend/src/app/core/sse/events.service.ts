@@ -2,7 +2,8 @@ import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 
 import { AnalysesStore } from '../analyses.store';
 import { CvContextStore } from '../cv-context.store';
-import { AnalysisSummary } from '../models';
+import { CvImprovementStore } from '../cv-improvement.store';
+import { AnalysisSummary, CvImprovementState } from '../models';
 
 interface DeletedPayload {
   analysisId: string;
@@ -24,6 +25,7 @@ interface OutputPayload {
 export class EventsService {
   private readonly analyses = inject(AnalysesStore);
   private readonly cv = inject(CvContextStore);
+  private readonly cvImprovement = inject(CvImprovementStore);
 
   private _disconnected = signal(false);
 
@@ -74,6 +76,12 @@ export class EventsService {
 
     // A `cv.updated` event carries no state, so the client re-fetches the active CV (another tab replaced it).
     source.addEventListener('cv.updated', () => this.cv.reloadCv());
+
+    // The standalone CV build streams its full state on every stage change (docs/API.md §10).
+    source.addEventListener('cv.improvement.updated', (event) => {
+      const state = parse<CvImprovementState>(event);
+      if (state?.stage) this.cvImprovement.onUpdated(state);
+    });
 
     // Heartbeat: a liveness signal only, never shown to the user.
     source.addEventListener('ping', () => {

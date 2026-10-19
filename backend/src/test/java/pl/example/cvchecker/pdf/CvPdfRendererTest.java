@@ -164,6 +164,32 @@ class CvPdfRendererTest {
         }
     }
 
+    @Test
+    void compactsASparseOverflowBackOntoASinglePage() throws Exception {
+        // At the loosest density this content spills a few lines onto a second page; the renderer
+        // must compact spacing/size to keep the CV on ONE page rather than add a near-empty page.
+        List<String> bullets = new ArrayList<>();
+        for (int i = 0; i < 24; i++) {
+            bullets.add("Delivered feature number " + i + " end to end with tests and reviews");
+        }
+        CvDocument document = new CvDocument("Jan Kowalski", "Java Developer", "jan@example.com",
+                "+48 600 000 000", "Warszawa", List.of(),
+                "Experienced backend developer building reliable distributed services with Java.",
+                List.of(new ExperienceEntry("Backend Developer", "Acme", "2020-2025", bullets)),
+                List.of(new EducationEntry("Politechnika", "MSc", "2015-2020")),
+                List.of("Backend: Java, Spring Boot, PostgreSQL, Kafka", "Tools: Git, Docker, Kubernetes"),
+                List.of("Polish: Native", "English: C1"), List.of("OCP Java"));
+
+        Path out = temp.resolve("cv_fit.pdf");
+        renderer.render(document, out);
+
+        try (PDDocument pdf = Loader.loadPDF(out.toFile())) {
+            assertThat(pdf.getNumberOfPages()).isEqualTo(1);
+        }
+        // no content is dropped to achieve the fit
+        assertThat(extractor.extract(out)).contains("Delivered feature number 23");
+    }
+
     /** Captures every rendered text run's page coordinates and reports margin violations. */
     private static final class MarginCapturingStripper extends PDFTextStripper {
         final List<String> violations = new ArrayList<>();

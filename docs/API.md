@@ -488,6 +488,14 @@ the one snapshotted at creation (no re-snapshot).
 | `GAP_TEXT_BLANK` | 400 | `POST`/`PATCH` a skill gap with blank text (§9) |
 | `GAP_TEXT_TOO_LONG` | 400 | skill gap text > 300 characters |
 | `GAP_NOT_FOUND` | 404 | unknown skill gap id |
+| `REBUILD_RUNNING` | 409 | skill-gap regrouping already in progress (§9) |
+| `CLUSTER_LABEL_BLANK` | 400 | rename a grouped skill with a blank label (§9) |
+| `CLUSTER_LABEL_TOO_LONG` | 400 | grouped-skill label > 120 characters |
+| `CLUSTER_NOT_FOUND` | 404 | unknown grouped-skill id |
+| `IMPROVEMENT_RUNNING` | 409 | a standalone CV build is already in progress (§10) |
+| `IMPROVEMENT_SKILLS_EMPTY` | 400 | no (non-blank) skills selected for the CV build |
+| `IMPROVEMENT_SKILL_TOO_LONG` | 400 | a selected skill name > 120 characters |
+| `IMPROVEMENT_TOO_MANY_SKILLS` | 400 | more than 30 skills selected |
 | `LLM_INVALID_OUTPUT` | 502 | model output failed validation after max retries — retry |
 | `LLM_ABORTED` | 502 | LLM call aborted because the analysis run was cancelled — restart the run |
 | `INTERNAL_ERROR` | 500 | unexpected failure — retry |
@@ -583,6 +591,7 @@ browser's per-domain connection limit (≈6 on HTTP/1.1) that previously froze j
 | `analysis.deleted` | an analysis was removed | `{ "analysisId": "…" }` |
 | `models.updated` | the model state changed (selection, load, readiness) | `{}` (client re-fetches `GET /api/llm/models`) |
 | `cv.updated` | the active CV was uploaded or replaced | `{}` (client re-fetches `GET /api/cv`) |
+| `cv.improvement.updated` | the standalone CV build changes stage (§10) | CV build state §10 |
 | `ping` | heartbeat, every ~15-20 s | `{}` |
 
 Example:
@@ -727,7 +736,147 @@ key; user values are never touched by aggregation.
   does not bring it back.
 - **404** `GAP_NOT_FOUND`.
 
+### `GET /api/skill-gaps/clusters` — grouped + ranked skills
+
+The raw gap list keeps one entry per phrasing, so the same skill surfaces many times ("Docker and
+Kubernetes" vs "znajomość rozwiązań Docker i Kubernetes"). A **background job** periodically folds
+every gap into one bag, **translates the terms to English and groups the synonymous ones into a
+single canonical skill** (LLM call #1), then **scores how important each canonical skill is in the
+context of the analysed postings** (LLM call #2). Grouping is a coarse overview: it never touches the
+curated gap rows. It runs automatically after every `cvchecker.skill-gaps.group-every` (default `5`)
+completed analyses and on demand via `POST`.
+
+```json
+{
+  "running": false,
+  "lastRunAt": "2026-10-18T10:00:00Z",
+  "lastError": null,
+  "clusters": [
+    {
+      "id": "7b2a…-uuid",
+      "label": "Kubernetes",
+      "importance": 4,
+      "rationale": "required as a must-have in most postings",
+      "occurrences": 5,
+      "kind": "MISSING",
+      "members": [
+        { "text": "znajomość rozwiązań Docker i Kubernetes", "kind": "MISSING", "occurrences": 2 }
+      ],
+      "updatedAt": "2026-10-18T10:00:00Z"
+    }
+  ]
+}
+```
+
+- `label` — the model's canonical (English) skill name.
+- `importance` — `1`–`5`, the model's judgement in the context of the analysed postings (`1` when it
+  could not be scored).
+- `occurrences` — the sum of its member gaps' live `occurrences` (each phrasing counts).
+- `kind` — `MISSING` when any member is missing, otherwise `NICE`.
+- `members` — the underlying (possibly Polish) gap phrasings folded into this skill.
+- `running` / `lastRunAt` / `lastError` — the job's state; `clusters` is empty until the first run.
+
+Sorted by `importance` (desc), then `occurrences` (desc), then `label`. `GET` returns the current
+clusters and triggers **no** work; a run in flight is reported by `running`.
+
+### `POST /api/skill-gaps/clusters/rebuild` — regroup now
+
+Starts a run **synchronously** (the UI waits with a spinner) and returns the refreshed payload above.
+
+- **200**: the refreshed payload (`running:false`, `lastRunAt` set).
+- **409** `REBUILD_RUNNING` — a run is already in progress (the automatic job, or another click).
+- **502** `LLM_INVALID_OUTPUT` — the model output failed validation.
+
+### `PATCH /api/skill-gaps/clusters/{id}` — rename a grouped skill
+
+Renames the canonical `label` of one cluster (the grouped view is a coarse, informational overview, so
+editing it does not touch the curated gaps). The new label is persisted in the cluster store and
+survives until the next regrouping run recomputes the labels from scratch.
+
+```json
+{ "label": "Cloud & Kubernetes" }
+```
+
+- `label` — required, non-blank, ≤ 120 characters.
+- **200**: the refreshed payload (same shape as `GET /api/skill-gaps/clusters`).
+- **400** `CLUSTER_LABEL_BLANK` / `CLUSTER_LABEL_TOO_LONG`.
+- **404** `CLUSTER_NOT_FOUND`.
+
+### `DELETE /api/skill-gaps/clusters/{id}` — remove a grouped skill
+
+Removes the cluster **and every underlying gap it grouped** — each member goes through the §9 gap
+delete (a derived gap is dismissed so it does not reappear, a manual one is hard-deleted) — then drops
+the cluster. The curated list and the next regrouping reflect the removal.
+
+- **204** — removed.
+- **404** `CLUSTER_NOT_FOUND`.
+
 Skill gaps are a personal backlog, not tied to one analysis: deleting an analysis does not remove its
 aggregated gaps (they simply stop being re-counted and disappear only if no other analysis raises
-them, once dismissed or never seen again). Changes are **not** pushed over SSE; the view refreshes on
-open and after each action.
+them, once dismissed or never seen again). Changes — including a finished regrouping — are **not**
+pushed over SSE; the view refreshes on open and after each action.
+
+---
+
+## 10. CV builder — improve the CV with selected skills
+
+**Independent of the analysis flow** (no job posting): the user picks skills — typically the grouped
+canonical skills from §9 — and the backend reshapes the **active CV** (§2) into an ATS-formatted
+document that contains those skills in its SKILLS section, leaving every other fact unchanged. There
+are no approved suggestions and no posting here: the only content change is the user-selected skill
+list (the app is a CV builder, not a skill tracker). The PDF is produced by the same renderer as §4.
+
+This is a single, **current** artifact (no per-analysis history, no id): one build runs at a time on
+a dedicated executor. Starting a new build replaces the previous result, deleting its temp file.
+Progress is broadcast as `cv.improvement.updated` (§7).
+
+### `POST /api/cv/improvement` — build an improved CV
+
+Body:
+
+```json
+{ "skills": ["Kubernetes", "GraphQL"] }
+```
+
+- `skills` — required, non-empty; trimmed and de-duplicated; each ≤ 120 characters; at most 30.
+- Requires an active CV (§2) and a ready model (§3).
+
+- **202**: the current build state (stage `REWRITING`).
+- **400** `IMPROVEMENT_SKILLS_EMPTY` — no (non-blank) skills.
+- **400** `IMPROVEMENT_SKILL_TOO_LONG` — a skill name over the limit.
+- **400** `IMPROVEMENT_TOO_MANY_SKILLS` — more than 30 skills.
+- **409** `IMPROVEMENT_RUNNING` — a build is already in progress.
+- **422** `CV_MISSING` — no active CV.
+- **422** `MODEL_NOT_READY` — no ready model (see §3).
+
+### `GET /api/cv/improvement` — current build state
+
+- **200**:
+
+```json
+{
+  "stage": "COMPLETED",
+  "skills": ["Kubernetes", "GraphQL"],
+  "modelId": "qwen2.5-7b-instruct",
+  "startedAt": "2026-10-18T10:00:00Z",
+  "finishedAt": "2026-10-18T10:02:00Z",
+  "errorCode": null,
+  "errorMessage": null,
+  "resultUrl": "/api/cv/improvement/result?v=7b2a…-uuid"
+}
+```
+
+- `stage` — `NONE` (never run) | `REWRITING` (LLM) | `RENDERING` (PDF) | `COMPLETED` | `FAILED`.
+- `skills` / `modelId` / `startedAt` — the inputs of the current (or last) build.
+- `errorCode` / `errorMessage` — set when `FAILED` (`LLM_INVALID_OUTPUT` | `LLM_ABORTED` | `INTERNAL_ERROR`).
+- `resultUrl` — the download path; the `v` query is a cache-buster (the run id); `null` unless `COMPLETED`.
+
+### `GET /api/cv/improvement/result` — download the improved PDF
+
+- **200**: `Content-Type: application/pdf`,
+  `Content-Disposition: attachment; filename="cv-improved.pdf"`.
+- **409** `NOT_READY` — no completed build yet.
+- **404** `RESULT_NOT_FOUND` — completed, but the file was cleaned up (e.g. a newer build replaced it).
+
+Layout note: the renderer targets **one page** and never lets a tiny overflow spill onto a sparse
+extra page (it compacts spacing/size within a bounded range to fit the content).

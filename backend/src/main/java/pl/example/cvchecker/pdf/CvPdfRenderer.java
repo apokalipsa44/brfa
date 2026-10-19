@@ -2,8 +2,10 @@ package pl.example.cvchecker.pdf;
 
 import java.awt.Color;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +32,11 @@ import pl.example.cvchecker.llm.ExperienceEntry;
  * job/education lines with the title in bold and dates right-aligned on the same line, bullets
  * with a hanging indent. Uses PDFBox 3 directly with an embedded DejaVu Sans font (full Polish
  * character set).
+ *
+ * <p><b>Page fitting:</b> the document is rendered at several bounded layout densities and the
+ * result that stays on a <em>single</em> page is preferred (otherwise the one with the fewest pages).
+ * This keeps a CV from spilling two or three trailing lines onto a near-empty extra page without ever
+ * dropping content (docs/API.md §10).
  */
 @Component
 public class CvPdfRenderer {
@@ -50,6 +57,9 @@ public class CvPdfRenderer {
     private static final float SECTION_GAP = 14f;
     private static final float ENTRY_GAP = 7f;
 
+    /** Layout densities tried loose → tight; the first that fits one page wins (docs/API.md §10). */
+    private static final float[] DENSITIES = {1f, 0.96f, 0.92f, 0.88f};
+
     private static final Color ACCENT = new Color(0x1F, 0x3A, 0x5F);
     private static final Color TEXT = new Color(0x22, 0x22, 0x22);
     private static final Color MUTED = new Color(0x55, 0x55, 0x55);
@@ -62,8 +72,24 @@ public class CvPdfRenderer {
         this.boldFont = readFont("fonts/DejaVuSans-Bold.ttf");
     }
 
-    /** Renders {@code document} to {@code target} as a selectable-text PDF. */
+    /** Renders {@code document} to {@code target} as a selectable-text PDF, preferring a single page. */
     public void render(CvDocument document, Path target) throws IOException {
+        Attempt best = null;
+        for (float density : DENSITIES) {
+            Attempt attempt = renderOnce(document, density);
+            if (best == null || attempt.pages() < best.pages()) {
+                best = attempt;
+            }
+            if (attempt.pages() <= 1) {
+                best = attempt; // the loosest density that already fits one page
+                break;
+            }
+        }
+        Files.write(target, best.bytes());
+    }
+
+    /** Renders once at {@code density} into memory, reporting the resulting page count. */
+    private Attempt renderOnce(CvDocument document, float density) throws IOException {
         try (PDDocument pdf = new PDDocument()) {
             PDDocumentInformation info = pdf.getDocumentInformation();
             String name = clean(document.fullName());
@@ -72,23 +98,27 @@ public class CvPdfRenderer {
 
             PDType0Font regular = PDType0Font.load(pdf, new ByteArrayInputStream(regularFont), true);
             PDType0Font bold = PDType0Font.load(pdf, new ByteArrayInputStream(boldFont), true);
-            try (Writer writer = new Writer(pdf, regular, bold)) {
+            int pages;
+            try (Writer writer = new Writer(pdf, regular, bold, density)) {
                 writeDocument(writer, document);
+                pages = writer.pages;
             }
-            pdf.save(target.toFile());
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            pdf.save(out);
+            return new Attempt(out.toByteArray(), pages);
         }
     }
 
     private void writeDocument(Writer w, CvDocument doc) throws IOException {
-        w.centered(clean(doc.fullName()), w.bold, NAME_SIZE, ACCENT, 6f);
+        w.centered(clean(doc.fullName()), w.bold, w.scaled(NAME_SIZE), ACCENT, 6f);
 
         if (doc.headline() != null && !doc.headline().isBlank()) {
-            w.centered(clean(doc.headline()), w.regular, 11f, MUTED, 2f);
+            w.centered(clean(doc.headline()), w.regular, w.scaled(11f), MUTED, 2f);
         }
 
         String contact = joinNonBlank("  |  ", doc.email(), doc.phone(), doc.location(),
                 String.join("  |  ", nonBlank(doc.links())));
-        if (!contact.isBlank()) w.centered(contact, w.regular, CONTACT_SIZE, MUTED, 2f);
+        if (!contact.isBlank()) w.centered(contact, w.regular, w.scaled(CONTACT_SIZE), MUTED, 2f);
 
         if (doc.summary() != null && !doc.summary().isBlank()) {
             w.heading("Professional Summary");
@@ -100,7 +130,7 @@ public class CvPdfRenderer {
             for (ExperienceEntry e : doc.experience()) {
                 w.entryHeader(e.title(), e.company(), e.dates());
                 w.bullets(e.bullets());
-                w.gap(ENTRY_GAP);
+                w.gap(w.entryGap);
             }
         }
 
@@ -179,19 +209,44 @@ public class CvPdfRenderer {
         }
     }
 
+    /** One density's outcome: the rendered bytes and how many pages it needed. */
+    private record Attempt(byte[] bytes, int pages) {
+    }
+
     private static final class Writer implements AutoCloseable {
 
         private final PDDocument pdf;
         final PDType0Font regular;
         final PDType0Font bold;
+        private final float density;
+        private final float bodySize;
+        private final float bodyLeading;
+        private final float headingSize;
+        private final float bulletIndent;
+        private final float sectionGap;
+        final float entryGap;
+
         private PDPageContentStream stream;
         private float y;
+        int pages;
 
-        Writer(PDDocument pdf, PDType0Font regular, PDType0Font bold) throws IOException {
+        Writer(PDDocument pdf, PDType0Font regular, PDType0Font bold, float density) throws IOException {
             this.pdf = pdf;
             this.regular = regular;
             this.bold = bold;
+            this.density = density;
+            this.bodySize = BODY_SIZE * density;
+            this.bodyLeading = BODY_LEADING * density;
+            this.headingSize = HEADING_SIZE * density;
+            this.bulletIndent = BULLET_INDENT * density;
+            this.sectionGap = SECTION_GAP * density;
+            this.entryGap = ENTRY_GAP * density;
             newPage();
+        }
+
+        /** A base size scaled by this run's density. */
+        float scaled(float base) {
+            return base * density;
         }
 
         private void newPage() throws IOException {
@@ -200,6 +255,7 @@ public class CvPdfRenderer {
             pdf.addPage(page);
             stream = new PDPageContentStream(pdf, page);
             y = PAGE_HEIGHT - MARGIN_TOP;
+            pages++;
         }
 
         private void ensure(float needed) throws IOException {
@@ -222,10 +278,10 @@ public class CvPdfRenderer {
         }
 
         void heading(String title) throws IOException {
-            ensure(SECTION_GAP + HEADING_SIZE + 10f + 2 * BODY_LEADING);
-            y -= SECTION_GAP;
-            y -= HEADING_SIZE;
-            drawText(title.toUpperCase(), bold, HEADING_SIZE, MARGIN_X, ACCENT);
+            ensure(sectionGap + headingSize + 10f + 2 * bodyLeading);
+            y -= sectionGap;
+            y -= headingSize;
+            drawText(title.toUpperCase(), bold, headingSize, MARGIN_X, ACCENT);
             float ruleY = y - 4f;
             stream.setStrokingColor(ACCENT);
             stream.setLineWidth(0.8f);
@@ -237,10 +293,10 @@ public class CvPdfRenderer {
 
         void paragraph(String text) throws IOException {
             if (text == null || text.isBlank()) return;
-            for (String line : wrap(clean(text), regular, BODY_SIZE, CONTENT_WIDTH, CONTENT_WIDTH)) {
-                ensure(BODY_LEADING);
-                y -= BODY_LEADING;
-                drawText(line, regular, BODY_SIZE, MARGIN_X, TEXT);
+            for (String line : wrap(clean(text), regular, bodySize, CONTENT_WIDTH, CONTENT_WIDTH)) {
+                ensure(bodyLeading);
+                y -= bodyLeading;
+                drawText(line, regular, bodySize, MARGIN_X, TEXT);
             }
             y -= 2f;
         }
@@ -251,30 +307,30 @@ public class CvPdfRenderer {
             String d = clean(dates);
             if (t.isBlank() && o.isBlank() && d.isBlank()) return;
 
-            ensure(BODY_LEADING * 2.5f);
+            ensure(bodyLeading * 2.5f);
 
             String sep = (!t.isBlank() && !o.isBlank()) ? " — " : "";
-            float leftWidth = width(t, bold, BODY_SIZE) + width(sep + o, regular, BODY_SIZE);
-            float dateWidth = d.isBlank() ? 0f : width(d, regular, BODY_SIZE);
+            float leftWidth = width(t, bold, bodySize) + width(sep + o, regular, bodySize);
+            float dateWidth = d.isBlank() ? 0f : width(d, regular, bodySize);
 
             if (leftWidth + dateWidth + 12f <= CONTENT_WIDTH) {
-                y -= BODY_LEADING;
+                y -= bodyLeading;
                 float x = MARGIN_X;
                 if (!t.isBlank()) {
-                    drawText(t, bold, BODY_SIZE, x, TEXT);
-                    x += width(t, bold, BODY_SIZE);
+                    drawText(t, bold, bodySize, x, TEXT);
+                    x += width(t, bold, bodySize);
                 }
-                if (!o.isBlank()) drawText(sep + o, regular, BODY_SIZE, x, TEXT);
+                if (!o.isBlank()) drawText(sep + o, regular, bodySize, x, TEXT);
                 if (!d.isBlank()) {
-                    drawText(d, regular, BODY_SIZE, MARGIN_X + CONTENT_WIDTH - dateWidth, MUTED);
+                    drawText(d, regular, bodySize, MARGIN_X + CONTENT_WIDTH - dateWidth, MUTED);
                 }
             } else {
                 String joined = joinNonBlank(" — ", t, o);
                 if (!d.isBlank()) joined = joined.isBlank() ? d : joined + " (" + d + ")";
-                for (String line : wrap(joined, bold, BODY_SIZE, CONTENT_WIDTH, CONTENT_WIDTH)) {
-                    ensure(BODY_LEADING);
-                    y -= BODY_LEADING;
-                    drawText(line, bold, BODY_SIZE, MARGIN_X, TEXT);
+                for (String line : wrap(joined, bold, bodySize, CONTENT_WIDTH, CONTENT_WIDTH)) {
+                    ensure(bodyLeading);
+                    y -= bodyLeading;
+                    drawText(line, bold, bodySize, MARGIN_X, TEXT);
                 }
             }
             y -= 2f;
@@ -284,13 +340,13 @@ public class CvPdfRenderer {
             if (items == null) return;
             for (String item : items) {
                 if (item == null || item.isBlank()) continue;
-                List<String> lines = wrap(clean(item), regular, BODY_SIZE,
-                        CONTENT_WIDTH - BULLET_INDENT, CONTENT_WIDTH - BULLET_INDENT);
+                List<String> lines = wrap(clean(item), regular, bodySize,
+                        CONTENT_WIDTH - bulletIndent, CONTENT_WIDTH - bulletIndent);
                 for (int i = 0; i < lines.size(); i++) {
-                    ensure(BODY_LEADING);
-                    y -= BODY_LEADING;
-                    if (i == 0) drawText("•", regular, BODY_SIZE, MARGIN_X + 2f, ACCENT);
-                    drawText(lines.get(i), regular, BODY_SIZE, MARGIN_X + BULLET_INDENT, TEXT);
+                    ensure(bodyLeading);
+                    y -= bodyLeading;
+                    if (i == 0) drawText("•", regular, bodySize, MARGIN_X + 2f, ACCENT);
+                    drawText(lines.get(i), regular, bodySize, MARGIN_X + bulletIndent, TEXT);
                 }
                 y -= 1.5f;
             }
@@ -305,17 +361,17 @@ public class CvPdfRenderer {
             }
             String label = clean.substring(0, idx + 1);
             String rest = clean.substring(idx + 1).strip();
-            float labelWidth = width(label + " ", bold, BODY_SIZE);
+            float labelWidth = width(label + " ", bold, bodySize);
 
-            List<String> lines = wrap(rest, regular, BODY_SIZE, CONTENT_WIDTH - labelWidth, CONTENT_WIDTH);
-            ensure(BODY_LEADING);
-            y -= BODY_LEADING;
-            drawText(label, bold, BODY_SIZE, MARGIN_X, TEXT);
-            drawText(lines.get(0), regular, BODY_SIZE, MARGIN_X + labelWidth, TEXT);
+            List<String> lines = wrap(rest, regular, bodySize, CONTENT_WIDTH - labelWidth, CONTENT_WIDTH);
+            ensure(bodyLeading);
+            y -= bodyLeading;
+            drawText(label, bold, bodySize, MARGIN_X, TEXT);
+            drawText(lines.get(0), regular, bodySize, MARGIN_X + labelWidth, TEXT);
             for (int i = 1; i < lines.size(); i++) {
-                ensure(BODY_LEADING);
-                y -= BODY_LEADING;
-                drawText(lines.get(i), regular, BODY_SIZE, MARGIN_X, TEXT);
+                ensure(bodyLeading);
+                y -= bodyLeading;
+                drawText(lines.get(i), regular, bodySize, MARGIN_X, TEXT);
             }
             y -= 2f;
         }

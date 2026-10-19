@@ -2,23 +2,17 @@
   class="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4"
 >
   <div class="flex items-center gap-2">
-    <button
-      type="button"
-      class="rounded-md p-2 text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none lg:hidden"
-      aria-label="Open analyses"
-      (click)="openSidebar.emit()"
-    >
-      <span aria-hidden="true">☰</span>
-    </button>
+    @if (showSidebarToggle()) {
+      <button
+        type="button"
+        class="rounded-md p-2 text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none lg:hidden"
+        aria-label="Open analyses"
+        (click)="openSidebar.emit()"
+      >
+        <span aria-hidden="true">☰</span>
+      </button>
+    }
     <h1 class="text-sm font-semibold whitespace-nowrap text-slate-900">CV Checker</h1>
-
-    <button
-      type="button"
-      class="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors duration-150 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
-      (click)="openSkillGaps.emit()"
-    >
-      Skill gaps
-    </button>
 
     @if (events.disconnected()) {
       <span
