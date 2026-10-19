@@ -1,59 +1,60 @@
 # CV Checker
 
-Lokalny asystent aplikowania o pracę: wrzucasz CV w PDF, wybierasz model LLM działający w
-[LM Studio](https://lmstudio.ai), a aplikacja ocenia dopasowanie CV do oferty, pokazuje braki i
-proponuje zmiany. Po akceptacji wybranych poprawek generuje nowe, czytelne dla ATS CV w PDF.
-Wszystko działa na Twoim komputerze — żadne dane nie opuszczają maszyny.
+A local job-application assistant: upload your CV as a PDF, pick an LLM served by
+[LM Studio](https://lmstudio.ai), and the app scores how well the CV matches a job posting, shows
+the gaps, and suggests concrete changes. Once you approve the edits, it renders a new ATS-friendly
+PDF. Everything runs on your machine — no data leaves it.
 
-![Widok analizy](docs/screenshots/analysis.png)
+![Analysis view](docs/screenshots/analysis.png)
 
-## Funkcje
+## Features
 
-- **Ocena dopasowania** — wynik 0–100, podsumowanie, dopasowane i brakujące słowa kluczowe oraz
-  lista wymagań z oferty (must-have / nice-to-have / soft) z cytatami z CV.
-- **Poprawa CV z akceptacją** — LLM proponuje konkretne zmiany (sekcja, przed/po, priorytet).
-  Nic nie jest przepisywane bez Twojej zgody; model nie może wymyślać doświadczenia.
-- **Nowe CV w PDF** — poprawione CV jest renderowane od zera w jednostronicowym szablonie ATS
-  (tekst zaznaczalny, pełne polskie znaki, bez grafik i tabel).
-- **Oferta z tekstu lub linku** — wklej opis lub podaj URL; serwer sam pobierze i oczyści stronę
-  (JSON-LD → statyczny HTML → headless render).
-- **Skill gaps** — braki z wszystkich analiz są agregowane, grupowane synonimami i oceniane pod
-  kątem ważności; z wybranych umiejętności zbudujesz osobne CV.
-- **Live updates** — jeden strumień SSE (`/api/events`) aktualizuje listę analiz, status modelu i
-  CV we wszystkich otwartych kartach.
-- **Trwałość** — analizy i braki są zapisywane w lokalnej bazie SQLite.
+- **Match score** — a 0–100 score, a summary, matched/missing keywords, and the posting's
+  requirements (must-have / nice-to-have / soft) with evidence quoted from the CV.
+- **Review-before-rewrite** — the LLM proposes concrete edits (section, before/after, priority).
+  Nothing is rewritten without your approval, and the model may not invent experience.
+- **New PDF** — the improved CV is rendered from scratch with a single-page ATS template
+  (selectable text, full Polish character set, no graphics or tables).
+- **Posting from text or a link** — paste the description or provide a URL; the server fetches and
+  cleans the page itself (JSON-LD → static HTML → headless render).
+- **Skill gaps** — missing skills from every analysis are aggregated, grouped by synonym, and
+  ranked by importance; selected skills can drive a standalone CV build.
+- **Live updates** — a single SSE stream (`/api/events`) keeps the analyses, model status, and CV
+  in sync across open tabs.
+- **Persistence** — analyses and skill gaps are stored in a local SQLite database.
 
-![Review propozycji zmian](docs/screenshots/review.png)
+![Review changes](docs/screenshots/review.png)
 ![Skill gaps](docs/screenshots/gaps.png)
 
-## Jak to działa
+## How it works
 
-1. Raz wgrywasz CV (PDF z warstwą tekstową, max 5 MB). Backend od razu wyciąga tekst.
-2. Wybierasz aktywny model w LM Studio (lista modeli jest pobierana z lokalnego serwera).
-3. Dodajesz ofertę pracy — wklejasz tekst albo podajesz link.
-4. Pipeline działa asynchronicznie: pobranie oferty → ocena → **pauza na Twoją akceptację** →
-   przepisanie CV → wygenerowanie PDF.
-5. Zaznaczasz proponowane zmiany i klikasz „Apply selected changes”. Gotowy plik pobierasz z karty
-   analizy.
+1. Upload your CV once (a PDF with a text layer, max 5 MB). The backend extracts the text
+   immediately.
+2. Select the active model in LM Studio (the model list comes from the local server).
+3. Add a job posting — either paste the text or provide a link.
+4. The pipeline runs asynchronously: fetch posting → evaluate → **pause for your approval** →
+   rewrite the CV → generate the PDF.
+5. Tick the suggested changes and click “Apply selected changes”. Download the result from the
+   analysis card.
 
-## Wymagania
+## Requirements
 
-| Narzędzie | Wersja |
+| Tool | Version |
 |---|---|
-| Java JDK | 21+ (projekt rozwijany i testowany na JDK 25) |
+| Java JDK | 21+ (developed and tested on JDK 25) |
 | Node.js | 22.22+ / 24.15+ / 26+ (Angular 22) |
 | npm | 11+ |
-| LM Studio | uruchomiony serwer lokalny z załadowanym modelem instruct/chat |
-| Docker + Compose | opcjonalnie, do uruchomienia całości w kontenerach |
+| LM Studio | local server running with a loaded instruct/chat model |
+| Docker + Compose | optional, for running everything in containers |
 
-Maven nie jest wymagany — w repo jest `./mvnw`. LM Studio musi nasłuchiwać na
-`http://localhost:1234` i mieć załadowany model. Sprawdź:
+Maven is not required — the repo includes `./mvnw`. LM Studio must listen on
+`http://localhost:1234` with a model loaded. Verify it with:
 
 ```bash
 curl http://localhost:1234/v1/models
 ```
 
-## Uruchomienie (dev)
+## Run (dev)
 
 ### 1. Backend (`:8080`)
 
@@ -62,9 +63,9 @@ cd backend
 LLM_MODEL=<model-id> ./mvnw spring-boot:run
 ```
 
-`<model-id>` to dokładna nazwa modelu z odpowiedzi `GET /v1/models` (np.
-`ista-daslab/qwen3.8-27b-gsq-rco-gguf/qwen3.8-27b-gsq-rco-iq3_s.gguf`). Model można też wybrać
-później w UI — wtedy nie musisz ustawiać `LLM_MODEL`.
+`<model-id>` is the exact name from the `GET /v1/models` response (e.g.
+`ista-daslab/qwen3.8-27b-gsq-rco-gguf/qwen3.8-27b-gsq-rco-iq3_s.gguf`). You can also select a model
+later in the UI, in which case `LLM_MODEL` is not required.
 
 ### 2. Frontend (`:4200`)
 
@@ -74,59 +75,59 @@ npm install
 npm run start
 ```
 
-Otwórz <http://localhost:4200>. Dev server proxuje `/api` na `http://localhost:8080`. Jeśli port
-4200 jest zajęty: `npm run start -- --port 4300`.
+Open <http://localhost:4200>. The dev server proxies `/api` to `http://localhost:8080`. If port
+4200 is taken: `npm run start -- --port 4300`.
 
-### 3. Pierwsze kroki
+### 3. First steps
 
-1. Wgraj CV (przeciągnij PDF lub kliknij „Choose a file”).
-2. Wybierz model w pasku u góry — status musi być zielony („active model”).
-3. Kliknij **New analysis**, wklej ofertę lub podaj link i uruchom analizę.
+1. Upload your CV (drag a PDF or click “Choose a file”).
+2. Pick a model in the top bar — its status must be green (“active model”).
+3. Click **New analysis**, paste a posting or provide a link, and start the analysis.
 
-## Uruchomienie w Dockerze
+## Run with Docker
 
-LM Studio zostaje na hoście — kontenery łączą się z nim przez `host.docker.internal`.
+LM Studio stays on the host — containers reach it through `host.docker.internal`.
 
-W LM Studio włącz **Serve on Local Network** (serwer musi nasłuchiwać na `0.0.0.0:1234`, nie tylko
-na `127.0.0.1`).
+In LM Studio, enable **Serve on Local Network** (the server must bind `0.0.0.0:1234`, not just
+`127.0.0.1`).
 
 ```bash
-cp .env.example .env     # ustaw LLM_MODEL na nazwę załadowanego modelu
+cp .env.example .env     # set LLM_MODEL to your loaded model id
 docker compose up --build
 ```
 
-Frontend: <http://localhost:4200>, backend: `http://localhost:8080`. Baza SQLite żyje w wolumenie
-`backend-data`, więc analizy przetrwają restart (`docker compose down -v` je usuwa). Porty można
-zmienić przez `BACKEND_PORT` / `FRONTEND_PORT` w `.env`.
+Frontend: <http://localhost:4200>, backend: `http://localhost:8080`. The SQLite database lives in
+the `backend-data` volume, so analyses survive restarts (`docker compose down -v` wipes them).
+Override ports with `BACKEND_PORT` / `FRONTEND_PORT` in `.env`.
 
-## Konfiguracja
+## Configuration
 
-| Zmienna | Domyślnie | Znaczenie |
+| Variable | Default | Meaning |
 |---|---|---|
-| `LLM_MODEL` | `unconfigured` | ID modelu z LM Studio; można też wybrać w UI |
-| `LLM_BASE_URL` | `http://localhost:1234/v1` | endpoint OpenAI-compatible (**musi kończyć się `/v1`**) |
-| `LM_STUDIO_BASE_URL` | `http://localhost:1234` | natywne API LM Studio (**bez** `/v1`) |
-| `CV_DB_PATH` | `./data/cvchecker.db` | plik bazy SQLite |
-| `SPRING_AI_OPENAI_API_KEY` | `lm-studio` | placeholder; LM Studio go ignoruje |
+| `LLM_MODEL` | `unconfigured` | LM Studio model id; can also be selected in the UI |
+| `LLM_BASE_URL` | `http://localhost:1234/v1` | OpenAI-compatible endpoint (**must end in `/v1`**) |
+| `LM_STUDIO_BASE_URL` | `http://localhost:1234` | LM Studio native API (**without** `/v1`) |
+| `CV_DB_PATH` | `./data/cvchecker.db` | SQLite database file |
+| `SPRING_AI_OPENAI_API_KEY` | `lm-studio` | placeholder; LM Studio ignores it |
 
-Pozostałe parametry (timeouty, liczba równoległych analiz, TTL, limity pobierania ofert) są w
+Other settings (timeouts, analysis concurrency, TTL, posting-fetch limits) live in
 `backend/src/main/resources/application.yml`.
 
 ## Stack
 
-| Warstwa | Technologia |
+| Layer | Technology |
 |---|---|
 | Frontend | Angular 22 (standalone, signals, zoneless), Tailwind CSS 4, Vitest |
 | Backend | Java 21, Spring Boot 4.1, Spring MVC, virtual threads |
 | LLM | Spring AI 2.0 → LM Studio (OpenAI-compatible API) |
-| Push | SSE (`SseEmitter`, jeden globalny strumień) |
-| PDF | Apache PDFBox 3 (ekstrakcja i render, osadzony DejaVu Sans) |
-| Dane | SQLite (`sqlite-jdbc` + Spring JDBC) |
+| Push | SSE (`SseEmitter`, one global stream) |
+| PDF | Apache PDFBox 3 (extraction and rendering, embedded DejaVu Sans) |
+| Data | SQLite (`sqlite-jdbc` + Spring JDBC) |
 
-## Testy
+## Tests
 
 ```bash
-# backend — testy live z LM Studio są pomijane bez LM_STUDIO_LIVE=1
+# backend — live LM Studio tests are skipped unless LM_STUDIO_LIVE=1
 cd backend
 ./mvnw test
 LM_STUDIO_LIVE=1 LLM_MODEL=<model-id> ./mvnw test
@@ -138,17 +139,17 @@ npm run build
 npx ng test --watch=false
 ```
 
-## Struktura projektu
+## Project structure
 
 ```
-backend/     Spring Boot API, pipeline analizy, LLM, PDF, SQLite
-frontend/    Angular SPA (workspace: analizy, CV, model, skill gaps)
-docs/        API.md (kontrakt REST/SSE), DECISIONS.md, ENVIRONMENT.md, screenshots/
-PLAN.en.md   plan implementacji i architektura
+backend/     Spring Boot API, analysis pipeline, LLM, PDF, SQLite
+frontend/    Angular SPA (workspace: analyses, CV, model, skill gaps)
+docs/        API.md (REST/SSE contract), DECISIONS.md, ENVIRONMENT.md, screenshots/
+PLAN.en.md   implementation plan and architecture
 ```
 
-## Dokumentacja
+## Documentation
 
-- [`docs/API.md`](docs/API.md) — pełny kontrakt REST/SSE (źródło prawdy dla zmian API).
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — dziennik decyzji technicznych.
-- [`PLAN.en.md`](PLAN.en.md) — plan i architektura (częściowo historyczny).
+- [`docs/API.md`](docs/API.md) — full REST/SSE contract (source of truth for API changes).
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — technical decision log.
+- [`PLAN.en.md`](PLAN.en.md) — plan and architecture (partly historical).
