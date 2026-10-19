@@ -23,7 +23,7 @@ Wszystko działa na Twoim komputerze — żadne dane nie opuszczają maszyny.
   CV we wszystkich otwartych kartach.
 - **Trwałość** — analizy i braki są zapisywane w lokalnej bazie SQLite.
 
-![Review zmian](docs/screenshots/review.png)
+![Review propozycji zmian](docs/screenshots/review.png)
 ![Skill gaps](docs/screenshots/gaps.png)
 
 ## Jak to działa
